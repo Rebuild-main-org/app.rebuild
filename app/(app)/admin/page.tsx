@@ -6,6 +6,7 @@ import { can, isAdmin } from "@/lib/auth"
 import { SEL, sb } from "@/lib/data"
 import { docTotal, formatMoney, summarize } from "@/lib/finance"
 import { aiUsageSummary } from "@/lib/ai-usage"
+import { AI_MODELS, DEFAULT_AI_MODEL, getAiModel } from "@/lib/settings"
 import type { FinanceDoc, Transaction } from "@/lib/types"
 import { NewFinanceDoc } from "@/components/admin/new-finance-doc"
 import { NewTransaction } from "@/components/admin/new-transaction"
@@ -17,10 +18,11 @@ import { AgentsManager } from "@/components/admin/agents-manager"
 import { NotifyBroadcast } from "@/components/admin/notify-broadcast"
 import { TransactionActions } from "@/components/admin/transaction-actions"
 import { PermissionsMatrix } from "@/components/admin/permissions-matrix"
+import { AiModelSetting } from "@/components/admin/ai-model-setting"
 import { Reveal } from "@/components/motion/reveal"
 import { CountUp } from "@/components/motion/count-up"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -42,6 +44,8 @@ export default async function AdminPage() {
   const txns = (txnData ?? []) as Transaction[]
   const aiUse = isAdmin(user.role) ? await aiUsageSummary() : null
   const canDeleteFinance = can(user, "billing.delete")
+  const isSuperAdmin = user.role === "SUPER_ADMIN"
+  const aiModel = isSuperAdmin ? await getAiModel() : null
   const s = summarize(txns, docs)
 
   return (
@@ -79,6 +83,23 @@ export default async function AdminPage() {
           </CardHeader>
           <CardContent>
             <AgentsManager />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* AI model — global switch (super admin only) */}
+      {isSuperAdmin && aiModel && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Modèle IA (plateforme)</CardTitle>
+            <CardDescription>
+              Le modèle Claude utilisé par toute l&apos;IA serveur (revue, triage, scaffold,
+              copilote…). Le changement s&apos;applique immédiatement à <strong>tous</strong> les
+              utilisateurs.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AiModelSetting current={aiModel} models={AI_MODELS} defaultModel={DEFAULT_AI_MODEL} />
           </CardContent>
         </Card>
       )}

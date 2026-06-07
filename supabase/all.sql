@@ -1233,3 +1233,12 @@ create table if not exists cli_tokens (
 );
 create index if not exists cli_tokens_user_idx on cli_tokens(user_id);
 alter table cli_tokens enable row level security;
+
+-- ── App-wide settings (key/value) — e.g. active AI model ───────────────────
+create table if not exists app_settings (
+  key        text primary key,
+  value      text not null,
+  updated_by text,
+  updated_at timestamptz not null default now()
+);
+alter table app_settings enable row level security;

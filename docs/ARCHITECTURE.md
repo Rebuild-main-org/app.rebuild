@@ -1,358 +1,689 @@
-# REBUILD Engineering OS — Architecture, workflows & pages
+# REBUILD Engineering OS — Architecture, workflows & référence des pages
 
-> Document de référence interne. **Prose en français, identifiants/code en anglais.**
-> Couvre : l'architecture globale, le modèle de données, la sécurité/RBAC, les
-> intégrations, l'IA serveur, le CLI `rebuild216`, les workflows métier, puis le
-> détail de **chaque page** et de chaque groupe de routes API.
+> **Document de référence interne — destiné à l'export.** Self-contained : la
+> prose porte toute l'information (les liens relatifs sont un bonus).
+> **Prose en français, identifiants/code en anglais.**
 >
-> Plateforme : **Next.js 16** (App Router, React 19, RSC) · **Tailwind v4** +
-> shadcn/ui · **Supabase** (Postgres + Auth, accès service-role) · **Vercel**
-> (prod : `https://app.rebuild.tn`). Org GitHub par défaut : `Rebuild-main-org`.
+> Couvre : architecture, arborescence, variables d'environnement, modèle de
+> données complet, sécurité/RBAC, intégrations, IA serveur, CLI `rebuild216`/MCP,
+> workflows métier, **détail de chaque page**, **chaque route API** (méthode +
+> autorisation + comportement), modules `lib/`, migrations et exploitation.
+
+---
+
+## Table des matières
+
+1. [Vue d'ensemble](#1-vue-densemble)
+2. [Stack & arborescence](#2-stack--arborescence)
+3. [Variables d'environnement](#3-variables-denvironnement)
+4. [Modèle de données](#4-modèle-de-données)
+5. [Authentification, RBAC & sécurité](#5-authentification-rbac--sécurité)
+6. [Intégrations externes](#6-intégrations-externes)
+7. [IA serveur](#7-ia-serveur)
+8. [CLI `rebuild216` + MCP](#8-cli-rebuild216--mcp)
+9. [Workflows métier](#9-workflows-métier)
+10. [Référence des pages](#10-référence-des-pages)
+11. [Référence des routes API](#11-référence-des-routes-api)
+12. [Modules `lib/`](#12-modules-lib)
+13. [Migrations & exploitation](#13-migrations--exploitation)
 
 ---
 
 ## 1. Vue d'ensemble
 
-REBUILD Engineering OS est la plateforme interne d'agence : elle réunit la
-gestion de projet (workspaces → projets → tickets/sprints/milestones), le suivi
-Git/CI réel via GitHub, un IDE web, le CRM (leads → devis → factures), le
-support (helpdesk + SLA), la messagerie « Discord » (chat + appels LiveKit), les
-analytics/DORA, et une couche IA (revue de code, triage, scaffold, copilote)
-pilotable aussi en autonomie via le CLI **`rebuild216`** + son serveur **MCP**.
+REBUILD Engineering OS est la plateforme interne d'agence. Elle réunit :
+
+- **Gestion de projet** : `Workspace` (client/espace) → `Project` → `Ticket`,
+  avec sprints, milestones, backlog, Kanban, vélocité, burndown, forecast.
+- **Git & CI/CD réels** via GitHub (Octokit) : branches, commits, PR, revues,
+  merge, releases, GitHub Actions, webhooks.
+- **IDE web** (Monaco) qui édite le repo réel via la Contents API.
+- **CRM** : leads → devis → factures → paiement (Stripe) → conversion.
+- **Support** : helpdesk avec statuts et SLA.
+- **Discord** : messagerie temps réel (DM, groupes, threads, réactions,
+  présence) + appels audio/vidéo (LiveKit).
+- **Analytics / DORA** et **rapports** auto (hebdo / sprint / release).
+- **Couche IA** : revue de code, triage, scaffold, copilote, résumés,
+  changelog — pilotable en autonomie via le CLI **`rebuild216`** et son
+  serveur **MCP**.
 
 ### Principes structurants
 
-- **RSC d'abord.** Les pages sont des Server Components `async` qui lisent les
+- **RSC d'abord.** Les pages sont des Server Components `async` lisant les
   données côté serveur ; l'interactivité est isolée dans des composants
   `"use client"`.
-- **Service-role + autorisation applicative.** La couche données (`lib/data.ts`)
-  utilise le client Supabase **service-role** qui *bypass la RLS*. L'autorisation
-  n'est donc **pas** déléguée à la base : elle est portée par le code
-  (`lib/auth.ts`, `lib/permissions.ts`, gardes dans les routes/pages).
-- **Une seule source de vérité d'identité.** `getSessionUser()`
-  (`lib/auth/session.ts`) lit l'utilisateur signé depuis les cookies Supabase et
-  son rôle depuis `profiles`.
-- **Intégrations réelles, dégradation propre.** GitHub/Stripe/LiveKit/Anthropic
-  s'activent selon les variables d'environnement ; en leur absence le code
-  *no-op* ou retombe sur les données Supabase, sans planter.
+- **Service-role + autorisation applicative.** `lib/data.ts` utilise le client
+  Supabase **service-role**, qui *bypass la RLS*. L'autorisation n'est donc pas
+  portée par la base mais par le code (`lib/auth.ts`, `lib/permissions.ts`,
+  gardes dans les pages et les routes).
+- **Identité = une seule source.** `getSessionUser()` lit l'utilisateur signé
+  (cookies Supabase) et son rôle depuis `profiles`.
+- **Intégrations optionnelles, dégradation propre.** Chaque service externe
+  s'active selon ses variables d'env ; sinon le code *no-op* ou retombe sur
+  Supabase, sans planter.
+- **i18n** : `en` / `fr` / `ar` (`lib/i18n.ts`, cookie `rebuild_lang`).
 
-### Couches
+---
 
-| Couche | Emplacement | Rôle |
+## 2. Stack & arborescence
+
+**Stack** : Next.js 16 (App Router, React 19, RSC, Turbopack) · TypeScript ·
+Tailwind v4 + shadcn/ui · Supabase (Postgres + Auth) · déploiement Vercel
+(`https://app.rebuild.tn`) · GSAP (animations) · Monaco (IDE) · Octokit ·
+Stripe · LiveKit · Anthropic SDK · MCP SDK.
+
+```
+next-app/
+├─ app/
+│  ├─ (auth)/            login, reset                — public
+│  ├─ (app)/             surface authentifiée (layout = AppShell)
+│  │  ├─ dashboard, workspaces, crm, support, analytics, reports,
+│  │  │  discord, rebuild216, how-to-use, profile, settings, admin
+│  │  └─ workspace/[id]/ overview, projects/[pid]/*, ide, git, chat,
+│  │                     documents, calendar, settings
+│  ├─ client/[token]/    portail client (hors AppShell, accès par token)
+│  └─ api/               ~125 route handlers (voir §11)
+├─ components/           UI : layout, projects, git, discord, admin, profile…
+├─ lib/                  logique métier (voir §12)
+├─ prompts/              prompts IA versionnés (+ _schemas/*.json)
+├─ agent_contracts/      contrats partagés agent ↔ serveur
+├─ cli/                  rebuild216.mjs, mcp-rebuild.mjs, agent/ (doctrine+skills)
+├─ supabase/             migrations SQL (all.sql = tout)
+├─ public/cli/           distribution statique du CLI (install.sh/ps1)
+└─ docs/                 ce document + docs/agents
+```
+
+---
+
+## 3. Variables d'environnement
+
+| Variable | Rôle | Si absente |
 |---|---|---|
-| Rendu / UI | `app/**/page.tsx`, `components/**` | RSC + îlots clients, shadcn/ui |
-| Auth & RBAC | `lib/auth/*`, `lib/auth.ts`, `lib/permissions.ts`, `middleware.ts` | session, rôles, sections, garde anti-IDOR |
-| Lecture données | `lib/queries.ts`, `lib/data.ts` (SEL + `sb()`) | sélecteurs Supabase, alias camelCase |
-| Écriture données | `lib/mutations.ts`, routes `app/api/**` | mutations + allocation `shortId` |
-| Intégrations | `lib/github.ts`, `lib/stripe.ts`, `lib/discord.ts`, `lib/vercel.ts`, `lib/email.ts`, `lib/slack.ts` | services externes |
-| IA | `lib/ai.ts`, `lib/ai-usage.ts`, `prompts/**` | features modèle + gouvernance coût |
-| CLI/Agent | `cli/rebuild216.mjs`, `cli/mcp-rebuild.mjs`, `cli/agent/**`, `agent_contracts/**` | livraison autonome & chat |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Auth (cookies, client navigateur) | app non fonctionnelle |
+| `SUPABASE_SERVICE_ROLE_KEY` | Couche données service-role (bypass RLS) | toute page authentifiée 500 (`sb()` throw) |
+| `DATABASE_URL` | Connexion Postgres directe (exécuter les `.sql`) | — |
+| `ANTHROPIC_API_KEY` | Active l'IA réelle (Claude) | IA retombe sur des heuristiques déterministes |
+| `AI_MODEL` | Override du modèle (défaut `claude-opus-4-8`) | défaut |
+| `GITHUB_TOKEN` | Données Git/PR/CI live (Octokit) | retombe sur les tables Supabase |
+| `GITHUB_WEBHOOK_SECRET` | Vérifie le webhook push/PR | webhook désactivé |
+| `GITHUB_DEFAULT_ORG` | Org des repos auto-créés (`Rebuild-main-org`) | défaut |
+| `STORAGE_BUCKET` | Bucket Supabase Storage privé (uploads) | bytes stockés en base64 dans Postgres |
+| `REALTIME_BRIDGE` | `"supabase"` pour fan-out SSE multi-instances | mono-instance |
+| `RESEND_API_KEY` / `EMAIL_FROM` | Email sortant (Resend) | email no-op |
+| `APP_URL` | Base URL absolue (liens email/portail) | `http://localhost:3000` |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Checkout facture + webhook PAID | paiement no-op |
+| `SLACK_WEBHOOK_URL` | Notifications Slack à fort signal | no-op |
+| `CLIENT_PORTAL_SECRET` | Signe les tokens du portail client | défaut = service-role key |
+| `BOOTSTRAP_ADMINS` / `BOOTSTRAP_SUPER_ADMINS` | Emails élevés à ADMIN / SUPER_ADMIN à la connexion | aucun |
+| `CRON_SECRET` | Protège `/api/cron` (Bearer envoyé par Vercel) | endpoint ouvert |
+| `SENTRY_DSN` / `SENTRY_TRACES_SAMPLE_RATE` | Tracing erreurs (opt-in) | désactivé |
+| `REBUILD_URL` | Base URL ciblée par le CLI | `http://localhost:3000` |
+| `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | Appels audio/vidéo Discord | appels désactivés |
+| `VERCEL_TOKEN` / `VERCEL_TEAM_ID` | Infos de déploiement Vercel | section vide |
+
+> **Déploiement Vercel — interdits** : ne pas mettre `output: "standalone"` ni
+> `"type":"module"` dans `package.json`. Combinés, ils provoquent
+> `ERR_REQUIRE_ESM` (le launcher CJS de Vercel `require()` un `page.js` traité
+> comme ESM) → **toutes** les routes authentifiées 500 après login.
 
 ---
 
-## 2. Modèle de données
+## 4. Modèle de données
 
-Types canoniques dans [`lib/types.ts`](../lib/types.ts) ; les alias colonne
-snake_case → camelCase sont dans `SEL` ([`lib/data.ts`](../lib/data.ts)).
+Types canoniques : `lib/types.ts`. Alias colonne snake_case → camelCase : `SEL`
+dans `lib/data.ts`. Accès : `lib/queries.ts` (lecture) et `lib/mutations.ts`
+(écriture). L'attribution du `shortId` (`<shortCode>-<n>`) est **serveur
+uniquement** (`next_ticket_number`, `lib/ticket-number.ts`).
 
-**Hiérarchie principale :** `Workspace` (= client/espace) → `Project`
-(`shortCode` sert de préfixe de ticket, ex. `ACME`) → `Ticket`. Un projet peut
-appartenir à un `ProjectGroup`. Les tickets se relient via `TicketLink`
-(`BLOCKS` / `RELATES` / `DUPLICATES`), s'organisent en `Sprint` et `Milestone`,
-portent des `TimeEntry`, `Comment`, `TicketAttachment`, `CustomFieldValue`.
+### 4.1 Hiérarchie & entités principales
 
-**Énumérations clés :**
+```
+Workspace (client/espace)
+ └─ ProjectGroup ── Project (shortCode = préfixe ticket, ex. "ACME")
+                     └─ Ticket ── TicketLink, Comment, TimeEntry,
+                                  TicketAttachment, CustomFieldValue
+                     ├─ Sprint, Milestone, SprintSnapshot (burndown)
+                     └─ TestCase / TestRun (QA)
+WorkspaceMember (user ↔ workspace, rôle local)
+```
 
-- `ProjectStatus` : `PLANNING · ACTIVE · REVIEW · ON_HOLD · DONE · CANCELLED`
-- `TicketStatus` : `BACKLOG · TODO · IN_PROGRESS · IN_REVIEW · DONE`
-- `TicketType` : `TASK · BUG · FEATURE · REVIEW · EPIC · SPIKE · SUBTASK`
-- `TicketPriority` : `CRITICAL · HIGH · MEDIUM · LOW` · `StoryPoints` : 1,2,3,5,8,13
-- `SupportStatus` : `NEW · OPEN · PENDING · RESOLVED · CLOSED`
-- `TestRunStatus` : `PASS · FAIL · BLOCKED · SKIPPED · UNTESTED`
-- `DocStatus` (finance) : `DRAFT · SENT · ACCEPTED · PAID · REJECTED`
+- **Workspace** : `id, name, slug, githubRepo, status, clientName, clientEmail,
+  startDate, technologies[]`.
+- **Project** : `id, name, shortCode, status, workspaceId, description,
+  startDate, endDate?, groupId?`.
+- **Ticket** : `id, shortId, title, description, type, priority, status,
+  projectId, assigneeId?, reporterId, labels[], epicId?, parentId?,
+  milestoneId?, sprintId?, points?, dueDate?, commitRef?, branch?, createdAt,
+  updatedAt, order`.
+- **Sprint** : `id, name, goal, startDate, endDate, projectId, status`.
+- **Milestone** : `id, title, description, dueDate, projectId, done,
+  validatedByClient, clientFeedback, validatedAt`.
+- **CRM** — **Lead** : `id, company, contactName, contactEmail, stage, value,
+  currency, source, ownerId?, notes?, workspaceId? (rempli à la conversion),
+  createdAt, updatedAt`.
+- **Finance** — **FinanceDoc** : `id, kind ("QUOTE"|"INVOICE"), number
+  (DEV-AAAA-NNN / FAC-AAAA-NNN), workspaceId?, clientName, issueDate, dueDate,
+  status, items (LineItem[]), taxRate, currency, notes?`. **Transaction** :
+  `id, kind, label, category, amount, date, workspaceId?`.
+- **Support** — **SupportTicket** : `id, subject, body, requesterEmail,
+  requesterId?, status, priority, workspaceId?, assigneeId?, resolvedById?,
+  resolvedAt?, slaDueAt?, …` + **SupportComment**.
+- **Git (miroir GitHub)** — `GitCommit`, `PullRequest`, `Branch`, `Deployment`.
+- **Divers** — `User`, `Notification`, `Document`, `Meeting`, `AuditLog`,
+  `CustomField`/`CustomFieldValue`.
 
-**Autres entités :** `User`, `WorkspaceMember`, `GitCommit`/`PullRequest`/
-`Branch`/`Deployment` (miroir GitHub), `FinanceDoc` (devis/facture) + `Transaction`,
-`Lead` (CRM), `SupportTicket`/`SupportComment`, `TestCase`/`TestRun`,
-`Notification`, `Document`, `Meeting`, `AuditLog`, `SprintSnapshot`.
+### 4.2 Énumérations & couleurs (META)
 
-L'attribution du `shortId` (`<shortCode>-<n>`) est **serveur uniquement**
-(`next_ticket_number`, [`lib/ticket-number.ts`](../lib/ticket-number.ts) /
-`lib/mutations.ts`) — jamais inventée par un client ou un agent.
-
-> Migrations SQL : `supabase/*.sql` (à appliquer à la main ; `all.sql` regroupe
-> tout). Tables récentes : `user_ai_keys`, `cli_sessions`, `cli_tokens`,
-> `section_permissions`, `ai_usage`, `project_groups`.
-
----
-
-## 3. Authentification, RBAC & sécurité
-
-### Session & middleware
-
-- [`middleware.ts`](../middleware.ts) rafraîchit le cookie de session Supabase à
-  chaque requête et redirige les non-authentifiés vers `/login`. Préfixes
-  **publics** : `/login`, `/auth`, `/client`, `/api/auth`, `/api/webhooks`,
-  `/api/health`, `/api/cron`, `/api/cli` (auth Bearer), `/cli` (distribution
-  statique), assets.
-- `getSessionUser()` renvoie `{ id, email, name, role, avatarUrl, githubUsername }`.
-  Élévation *bootstrap* : `BOOTSTRAP_ADMINS` (→ ADMIN tant que le rôle stocké est
-  encore le défaut ENGINEER) et `BOOTSTRAP_SUPER_ADMINS` + `admin@rebuild.tn`
-  (→ SUPER_ADMIN).
-
-### Rôles (`Role`)
-
-`SUPER_ADMIN · ADMIN · LEAD · PM · ENGINEER · QA · DESIGNER · SALES · FINANCE ·
-SUPPORT · CLIENT`.
-
-### Deux mécanismes d'autorisation complémentaires
-
-1. **Actions fines** — [`lib/auth.ts`](../lib/auth.ts) : `can(user, action)`
-   contre une `MATRIX` (ex. `project.delete`, `pr.merge`, `billing.manage`,
-   `billing.delete`, `admin.panel`, `crm.manage`, `support.resolve`,
-   `notify.broadcast`…). **`SUPER_ADMIN` court-circuite tout** (`can` renvoie
-   `true`). Helper `isAdmin(role)` = ADMIN ou SUPER_ADMIN.
-   - *Exemple :* la suppression de devis/factures est gardée par
-     `billing.delete: ["ADMIN"]` (donc ADMIN + SUPER_ADMIN, **pas** FINANCE).
-2. **Sections de navigation** — [`lib/permissions.ts`](../lib/permissions.ts) :
-   `canAccessSection(role, section)` / `sectionsAllowedFor(role)` sur les sections
-   `dashboard · workspaces · crm · support · analytics · reports`, avec des
-   défauts surchargeables par ligne dans `section_permissions` (réglés par le
-   SUPER_ADMIN depuis l'admin). Gate **à la fois** le nav et la page.
-
-### Autres garde-fous
-
-- **Anti-IDOR / BOLA** : `lib/auth/guard.ts` centralise les gardes objet-niveau
-  (le service-role bypass la RLS, donc l'autorisation objet vit ici).
-- **En-têtes de sécurité** ([`next.config.ts`](../next.config.ts)) : `X-Frame-Options:
-  DENY`, `X-Content-Type-Options: nosniff`, HSTS, `Permissions-Policy`, CSP en
-  **Report-Only** (Monaco a besoin de `unsafe-eval`/blob workers).
-- **Rate-limit** : `lib/ratelimit.ts`. **Audit** : `audit_logs` (page `/admin/audit`).
-- **Déploiement Vercel** : ne **pas** mettre `output: "standalone"` ni
-  `"type":"module"` dans `package.json` (sinon `ERR_REQUIRE_ESM` sur toutes les
-  routes après login — voir mémoire projet).
+| Enum | Valeurs | META |
+|---|---|---|
+| `Role` | SUPER_ADMIN, ADMIN, LEAD, PM, ENGINEER, QA, DESIGNER, SALES, FINANCE, SUPPORT, CLIENT | `ROLE_LABELS` |
+| `WorkspaceStatus` | ACTIVE, PAUSED, ARCHIVED | — |
+| `ProjectStatus` | PLANNING, ACTIVE, REVIEW, ON_HOLD, DONE, CANCELLED | `PROJECT_STATUS_META` |
+| `TicketStatus` | BACKLOG, TODO, IN_PROGRESS, IN_REVIEW, DONE | `STATUS_LABELS` |
+| `TicketType` | TASK, BUG, FEATURE, REVIEW, EPIC, SPIKE, SUBTASK | `TYPE_META` |
+| `TicketPriority` | CRITICAL, HIGH, MEDIUM, LOW | `PRIORITY_META` |
+| `StoryPoints` | 1, 2, 3, 5, 8, 13 | — |
+| `LinkType` | BLOCKS, RELATES, DUPLICATES | `LINK_LABELS` (+ inverse) |
+| `SprintStatus` | PLANNED, ACTIVE, COMPLETED | — |
+| `LeadStage` | LEAD, QUALIFIED, PROPOSAL, WON, LOST | `LEAD_STAGE_META` |
+| `DocStatus` | DRAFT, SENT, ACCEPTED, PAID, REJECTED | — |
+| `SupportStatus` | NEW, OPEN, PENDING, RESOLVED, CLOSED | `SUPPORT_STATUS_META` |
+| `TestRunStatus` | PASS, FAIL, BLOCKED, SKIPPED, UNTESTED | `TEST_RUN_META` |
+| `CustomFieldType` | TEXT, NUMBER, SELECT, DATE | — |
+| `Availability` | — | `AVAILABILITY_META` |
+| file status | (IDE) | `FILE_STATUS_META` |
 
 ---
 
-## 4. Intégrations externes
+## 5. Authentification, RBAC & sécurité
 
-| Service | Module | Activation | Usage |
+### 5.1 Session & middleware
+
+`middleware.ts` rafraîchit le cookie de session Supabase à chaque requête et
+redirige les non-authentifiés vers `/login`. **Préfixes publics** : `/login`,
+`/auth`, `/client`, `/api/auth`, `/api/webhooks`, `/api/health`, `/api/cron`,
+`/api/cli` (auth Bearer), `/cli` (distribution statique), assets.
+
+`getSessionUser()` (`lib/auth/session.ts`) → `{ id, email, name, role,
+avatarUrl?, githubUsername? }`. **Élévation bootstrap** : un email dans
+`BOOTSTRAP_ADMINS` devient ADMIN *tant que* son rôle stocké est encore le défaut
+ENGINEER (une affectation explicite gagne) ; `BOOTSTRAP_SUPER_ADMINS` +
+`admin@rebuild.tn` deviennent SUPER_ADMIN. `resolveAppUser()` mirroite l'identité
+dans la table-annuaire `users` (best-effort, pour résoudre les noms d'auteurs).
+
+### 5.2 Deux mécanismes d'autorisation
+
+**(a) Actions fines** — `lib/auth.ts`, `can(user, action)` contre une `MATRIX`.
+**`SUPER_ADMIN` court-circuite tout** (`can` renvoie `true`). `isAdmin(role)` =
+ADMIN ou SUPER_ADMIN.
+
+| Action | Rôles autorisés (hors SUPER_ADMIN qui a tout) |
+|---|---|
+| `workspace.create` / `workspace.delete` | ADMIN |
+| `workspace.edit` | ADMIN, LEAD |
+| `project.create` / `project.update` / `project.delete` | ADMIN, LEAD, PM |
+| `ticket.delete` | ADMIN, LEAD, PM |
+| `member.invite` | ADMIN, LEAD |
+| `pr.merge` | ADMIN, LEAD |
+| `pr.approve` | ADMIN, LEAD, ENGINEER |
+| `copilot.use` | tout le staff (tous sauf CLIENT) |
+| `admin.panel` | ADMIN |
+| `billing.manage` | ADMIN, FINANCE |
+| `billing.delete` | ADMIN *(devis/factures — destructif, FINANCE exclu)* |
+| `code.access` | ADMIN, LEAD, ENGINEER, QA, DESIGNER |
+| `crm.view` | ADMIN, LEAD, PM, SALES |
+| `crm.manage` | ADMIN, LEAD, SALES |
+| `qa.manage` | ADMIN, LEAD, PM, QA, ENGINEER |
+| `support.view` | ADMIN, LEAD, PM, SUPPORT |
+| `support.manage` | ADMIN, LEAD, SUPPORT |
+| `support.resolve` | SUPER_ADMIN uniquement |
+| `notify.broadcast` | SUPER_ADMIN uniquement |
+
+**(b) Sections de navigation** — `lib/permissions.ts`. Sections : `dashboard,
+workspaces, crm, support, analytics, reports`. `canAccessSection(role, section)`
+et `sectionsAllowedFor(role)` gèrent **le nav et la page**. Défauts :
+
+| Section | Défaut (SUPER_ADMIN toujours OK) |
+|---|---|
+| dashboard, workspaces, support | tous les rôles |
+| crm | ADMIN, LEAD, PM, SALES |
+| analytics, reports | ADMIN, LEAD, PM |
+
+Les défauts sont **surchargeables par ligne** dans la table
+`section_permissions` (réglés par le SUPER_ADMIN depuis `/admin`).
+
+### 5.3 Autres garde-fous
+
+- **Anti-IDOR / BOLA** : `lib/auth/guard.ts` centralise les gardes objet-niveau.
+- **En-têtes** (`next.config.ts`) : `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, HSTS, `Permissions-Policy`, **CSP en
+  Report-Only** (Monaco exige `unsafe-eval` + blob workers).
+- **Rate-limit** : `lib/ratelimit.ts`. **Audit** : `audit_logs` (`/admin/audit`,
+  écrit via `mutations.audit`). **MFA** : authenticator app (page Profile).
+- **Portail client** : tokens signés (`lib/portal.ts`, `CLIENT_PORTAL_SECRET`).
+
+---
+
+## 6. Intégrations externes
+
+| Service | Module | Activation | Capacités |
 |---|---|---|---|
-| **GitHub** (Octokit) | `lib/github.ts` | `GITHUB_TOKEN` | repos, branches, commits, PR, reviews, merge, releases, CI (Actions), webhooks, lecture/écriture de fichiers (Contents API → IDE web), diff pour la revue IA |
-| **Supabase** | `lib/supabase/*`, `lib/data.ts` | URL + clés | Auth (cookies) + Postgres (service-role) |
-| **Anthropic** | `lib/ai.ts` | `ANTHROPIC_API_KEY` *ou* clé par-utilisateur | features IA serveur |
-| **Stripe** | `lib/stripe.ts` | clés Stripe | checkout des factures, webhook paiement |
-| **LiveKit** | `lib/discord.ts` | `LIVEKIT_*` | jetons d'appel audio/vidéo dans Discord |
-| **Email/Slack** | `lib/email.ts`, `lib/slack.ts` | env | notifications sortantes |
-| **Vercel** | `lib/vercel.ts` | — | infos de déploiement par workspace |
+| **GitHub** | `lib/github.ts` (Octokit) | `GITHUB_TOKEN` | `ensureRepo`/`seedDefaultCI`, branches, commits (live, multi-branches, par auteur), PR (open/update/merge/diff/checks), revues, releases, branch protection, Actions (runs/rerun/cancel), webhooks, lecture/écriture de fichiers (IDE), `ghCompareDiff` pour la revue IA, appartenance org (gate du sign-in GitHub) |
+| **Supabase** | `lib/supabase/*`, `lib/data.ts` | URL + clés | Auth (cookies, anon) + Postgres (service-role) |
+| **Anthropic** | `lib/ai.ts` | `ANTHROPIC_API_KEY` *ou clé perso* | features IA (§7) |
+| **Stripe** | `lib/stripe.ts` | clés Stripe | checkout facture, webhook → `PAID` |
+| **LiveKit** | `lib/discord.ts` | `LIVEKIT_*` | jetons d'appel audio/vidéo |
+| **Email / Slack** | `lib/email.ts`, `lib/slack.ts` | env | notifications sortantes |
+| **Vercel** | `lib/vercel.ts` | `VERCEL_TOKEN` | déploiements par workspace |
+| **Storage** | `lib/storage.ts` | `STORAGE_BUCKET` | uploads dans un bucket privé (sinon base64) |
+| **Realtime/SSE** | `lib/events.ts`, `lib/realtime-bridge.ts` | `REALTIME_BRIDGE` | présence + events temps réel (fan-out multi-instances) |
 
-GitHub est central : `git_commits`/`pull_requests` ne sont remplis par le webhook
-push que sur les repos qui le configurent ; sinon les vues lisent **en direct**
-via Octokit (matching par login GitHub de l'utilisateur).
-
----
-
-## 5. IA serveur
-
-Toutes les features passent par `trackedCreate` ([`lib/ai.ts`](../lib/ai.ts)) qui
-enveloppe chaque appel modèle et enregistre l'usage. Si l'utilisateur a connecté
-sa propre clé Anthropic (« Connect with Claude », table `user_ai_keys`),
-`trackedCreate` instancie un client sur **sa** clé et la gouvernance saute le
-plafond budgétaire.
-
-| Feature | Fonction | Déclencheur |
-|---|---|---|
-| Revue de code | `codeReview()` | route `ai/review`, flux PR |
-| Génération de docs | `generateDocs()` | `ai/docs` |
-| Copilote / chat | `chat()` | `ai/chat` |
-| Triage de ticket | `triageTicket()` | `ai/triage` |
-| Devis depuis lead | `quoteFromLead()` | CRM |
-| Digest standup | `standupDigest()` | `ai/standup` |
-| Changelog depuis PRs | `changelogFromPRs()` | `ai/changelog` |
-| Résumé | `summarize()` | `ai/summary` |
-| Plan/scaffold depuis architecture | `planFromArchitecture()` | `workspaces/[id]/scaffold` |
-
-**Gouvernance** ([`lib/ai-usage.ts`](../lib/ai-usage.ts)) : contexte
-`AsyncLocalStorage` (`withAi`, `recordAiUsage`, `currentApiKey`), table
-`ai_usage` (feature/model/tokens/coût/workspace/projet), plafond budgétaire
-par-utilisateur, agrégats (`aiUsageSummary`, `workspaceAiSpend`,
-`estimationAccuracy`).
-
-Les prompts sont versionnés sous [`prompts/`](../prompts) (+ schémas JSON dans
-`prompts/_schemas/`) ; les contrats partagés agent/serveur sous
-[`agent_contracts/`](../agent_contracts) (`TICKET_CONTRACT`, `PR_CONTRACT`,
-`REVIEW_RUBRIC`, `DOMAIN_GLOSSARY`).
+Les `git_commits` / `pull_requests` Supabase ne sont remplis par le webhook
+`/api/webhooks/github/[wsId]` que sur les repos qui le configurent ; sinon les
+vues lisent **en direct** via Octokit (matching par login GitHub).
 
 ---
 
-## 6. CLI `rebuild216` + MCP
+## 7. IA serveur
 
-`cli/rebuild216.mjs` est le binaire agent : il clone le repo du workspace, écrit
-le contexte (`.rebuild/*.md` via `writeContext`), construit le system prompt
-(`buildSystem`) et lance Claude Code avec le serveur MCP `cli/mcp-rebuild.mjs`
-branché.
+**Modèle** : runtime, contrôlé par le **SUPER_ADMIN** depuis `/admin` (« Modèle IA
+(plateforme) »). `trackedCreate` résout le modèle actif à chaque appel via
+`getAiModel()` (`lib/settings.ts`, table `app_settings` clé `ai_model`, cache
+60 s) → sinon `AI_MODEL` env → défaut **`claude-opus-4-8`**. Changer le réglage
+s'applique **immédiatement à tous**. Choix : Opus 4.8/4.7/4.6, Sonnet 4.6,
+Haiku 4.5. Tous les appels passent par `trackedCreate` (`lib/ai.ts`) qui
+enregistre l'usage. Si l'utilisateur a connecté
+sa propre clé (« Connect with Claude », table `user_ai_keys`), `trackedCreate`
+crée un client sur **sa** clé et la gouvernance **saute le plafond budgétaire**.
+Sans `ANTHROPIC_API_KEY` ni clé perso, l'IA retombe sur des heuristiques
+déterministes (l'app reste fonctionnelle).
 
-**Modes** : `run` (livraison autonome) · `chat` (multi-tours interactif) ·
-`ops-fix` / `ops-conflict` (build/CI/merge).
+| Feature | Fonction | `max_tokens` | Sortie structurée | Déclencheur |
+|---|---|---|---|---|
+| Revue de code | `codeReview()` | 2048 | `REVIEW_SCHEMA` (json_schema) | `POST /api/ai/review`, flux PR |
+| Génération de docs | `generateDocs()` | 1500 | texte | `POST /api/ai/docs` |
+| Copilote / chat | `chat()` | — | texte | `POST /api/ai/chat` (`copilot.use`) |
+| Triage de ticket | `triageTicket()` | 1024 | `TRIAGE_SCHEMA` | `POST /api/ai/triage` |
+| Devis depuis lead | `quoteFromLead()` | 1500 | `QUOTE_SCHEMA` | CRM `quote` |
+| Plan/scaffold | `planFromArchitecture()` | 16000 | `SCAFFOLD_SCHEMA` → `ScaffoldPlan` | `scaffold` |
+| Digest standup | `standupDigest()` | — | texte | `POST /api/ai/standup` |
+| Changelog | `changelogFromPRs()` | — | texte | `POST /api/ai/changelog` |
+| Résumé | `summarize()` | — | texte | `POST /api/ai/summary` |
 
-**Outils MCP exposés** : `list_tickets`, `create_ticket` (backlog complet),
-`update_ticket_status`, `add_comment`, `capture_screenshots`,
-`upload_screenshot`. Côté serveur, les routes `app/api/cli/**` authentifient via
-`userFromBearer` ([`lib/cli-auth.ts`](../lib/cli-auth.ts)).
+**Gouvernance** (`lib/ai-usage.ts`) : contexte `AsyncLocalStorage` (`withAi`,
+`recordAiUsage`, `currentApiKey`, `userAnthropicKey`), table `ai_usage`
+(feature, model, tokens, coût, workspace_id, project_id), plafond budgétaire
+par-utilisateur, agrégats `aiUsageSummary` / `workspaceAiSpend` /
+`estimationAccuracy`. Prompts versionnés sous `prompts/` (+ schémas JSON dans
+`prompts/_schemas/`). Contrats partagés : `agent_contracts/` (`TICKET_CONTRACT`,
+`PR_CONTRACT`, `REVIEW_RUBRIC`, `DOMAIN_GLOSSARY`).
 
-**Jetons (no-expire).** Deux types de Bearer acceptés :
+---
+
+## 8. CLI `rebuild216` + MCP
+
+`cli/rebuild216.mjs` est le binaire agent ; `cli/mcp-rebuild.mjs` le serveur
+**MCP** (stdio) branché à Claude Code. Le CLI clone le repo du workspace, écrit
+le contexte (`.rebuild/*.md` via `writeContext` : tickets, contrats, skills,
+doctrine), construit le system prompt (`buildSystem`) et lance Claude Code.
+
+### Commandes
+
+```
+rebuild216 login                 # connexion → CLI token persistant
+rebuild216                       # choisir un projet, puis mode (autonome | chat)
+rebuild216 <project>             # projet nommé, puis le mode
+rebuild216 chat [project]        # direct chat + MCP
+rebuild216 -ops                  # intégrer des branches prêtes → PR + revue IA
+rebuild216 key <sk-...>          # clé Anthropic centrale (sinon `claude login`); --clear
+```
+
+### Modes
+- **run** (livraison autonome) · **chat** (interactif multi-tours) ·
+  **ops-fix** / **ops-conflict** (build/CI/merge).
+
+### Outils MCP
+`list_tickets`, `create_ticket` (backlog complet : type, priority, points,
+labels, assignee, parent/links, comment, time), `update_ticket_status`,
+`add_comment`, `capture_screenshots`, `upload_screenshot`.
+
+### Jetons — sessions **no-expire**
+Deux Bearer acceptés par `userFromBearer` (`lib/cli-auth.ts`) :
 1. **CLI token longue durée** (préfixe `rbld_`) — créé par `/api/cli/login` et
-   `/api/cli/token`, stocké **haché** dans `cli_tokens`, résolu directement vers
-   un user : **n'expire pas** (indispensable pour les longues livraisons, ex.
-   117 tickets). `rebuild216` le stocke en priorité et fait l'auto-upgrade d'une
-   ancienne session JWT via `ensurePersistentToken`.
+   `/api/cli/token`, **stocké haché** (SHA-256) dans `cli_tokens`, résolu
+   directement vers un user : **n'expire pas**. Indispensable pour les longues
+   livraisons (ex. 117 tickets). `rebuild216` le stocke en priorité et
+   auto-upgrade une ancienne session JWT (`ensurePersistentToken`).
 2. **JWT Supabase** (~1 h) — chemin legacy, avec refresh-sur-401 en secours.
 
+`cli_sessions` enregistre un *heartbeat* (« CLI connected ») à chaque appel
+authentifié.
+
 ---
 
-## 7. Workflows métier détaillés
+## 9. Workflows métier
 
-### 7.1 Cycle de vie d'un ticket
+### 9.1 Cycle de vie d'un ticket
+`BACKLOG → TODO → IN_PROGRESS → IN_REVIEW → DONE`. La transition vers `DONE`
+est gardée serveur (`/api/cli/ticket`) : refusée hors `IN_PROGRESS`/`IN_REVIEW`,
+et **parsing de la Definition of Done** — toute case `- [ ] dod:<id>` non cochée
+(et non `N/A`) bloque la clôture (409). Création/déplacement émettent
+`Activity`/`Notification` et peuvent lier `commitRef`/`branch`.
 
-`BACKLOG → TODO → IN_PROGRESS → IN_REVIEW → DONE`. La transition vers `DONE` est
-gardée côté serveur (`app/api/cli/ticket/route.ts`) : refusée hors
-`IN_PROGRESS`/`IN_REVIEW`, et **parsing de la Definition of Done** — les cases
-`- [ ] dod:<id>` non cochées (et non `N/A`) bloquent la clôture (409). Création
-et déplacement émettent des `Activity`/`Notification` et peuvent lier un
-`commitRef`/`branch`.
+### 9.2 Livraison autonome (`rebuild216 run`)
+1. Login → CLI token persistant. 2. `setupProject` : clone + `writeContext`.
+3. L'agent lit le backlog, implémente ticket par ticket, commit localement par
+changement (jamais de push direct — doctrine), met à jour les statuts et commente
+via MCP. 4. Coûts IA du run enregistrés (`/api/cli/usage`).
 
-### 7.2 Livraison autonome (`rebuild216 run`)
+### 9.3 PR, revue & merge
+Ouverture/MAJ de PR (`ghOpenOrUpdatePR`) → revue IA du diff (`ghCompareDiff` →
+`codeReview`, postée en commentaire) → protection de branche optionnelle
+(`ghProtectMain` : 1 review + « Build & Test » verts) → merge
+(`/api/git/[wsId]/prs/[number]/merge`, `pr.merge`, squash par défaut). CI = GitHub
+Actions réels. Le webhook `/api/webhooks/github/[wsId]` mire commits/PR/CI dans
+Supabase.
 
-1. Login → CLI token persistant.
-2. `setupProject` : clone du repo, `writeContext` (tickets, contrats, skills,
-   doctrine dans `.rebuild/`).
-3. L'agent lit le backlog (`list_tickets`), implémente ticket par ticket, commit
-   localement par changement (jamais de push direct selon la doctrine),
-   met à jour les statuts et commente via MCP.
-4. Les coûts IA du run sont enregistrés (`/api/cli/usage`).
+### 9.4 CRM : lead → devis → facture → paiement
+`Lead` (LEAD→QUALIFIED→PROPOSAL→WON/LOST) → **devis** IA
+(`/api/crm/leads/[id]/quote`, `quoteFromLead`) → `FinanceDoc` `QUOTE`
+(`DEV-AAAA-NNN`). Acceptation → **facture** `INVOICE` (`FAC-AAAA-NNN`). Paiement
+Stripe (`/api/finance/[id]/checkout` + webhook `/api/webhooks/stripe` → `PAID`).
+PDF : `/api/finance/[id]/pdf`. Conversion du lead → delivery/workspace :
+`/api/crm/leads/[id]/convert` (`crm.manage`). **Suppression** d'un devis/facture :
+`DELETE /api/admin/finance/[id]` (`billing.delete` → ADMIN/SUPER_ADMIN).
 
-### 7.3 Pull request, revue & merge
+### 9.5 Support & SLA
+Le demandeur ne voit que ses tickets ; le staff (`support.view`) voit tout ;
+seul le SUPER_ADMIN résout (`support.resolve`) et diffuse des avis
+(`notify.broadcast`). `slaDueAt` matérialise l'échéance SLA.
 
-Ouverture/MAJ de PR (`ghOpenOrUpdatePR`), revue IA sur le diff
-(`ghCompareDiff` → `codeReview`), protection de branche optionnelle
-(`ghProtectMain` : review + « Build & Test » verts), merge
-(`/api/git/[wsId]/prs/[number]/merge`, stratégie squash par défaut). CI = GitHub
-Actions réels (`ghWorkflowRuns`, re-run/cancel). Le webhook
-`/api/webhooks/github/[wsId]` mire commits/PR/CI dans Supabase.
+### 9.6 Scaffold depuis architecture
+`POST /api/workspaces/[id]/scaffold` : `preview:true` → renvoie le plan
+(`planFromArchitecture`) sans rien créer ; `plan` fourni → crée projets + backlog
+sans appel IA ; `{content}` legacy → crée directement. UI deux temps :
+`components/workspace/architecture-import.tsx`.
 
-### 7.4 CRM : lead → devis → facture → paiement
-
-`Lead` (stages CRM) → génération de **devis** IA (`/api/crm/leads/[id]/quote`,
-`quoteFromLead`) → `FinanceDoc` `kind:QUOTE` (`DEV-AAAA-NNN`). Acceptation →
-**facture** `kind:INVOICE` (`FAC-AAAA-NNN`). Paiement via Stripe
-(`/api/finance/[id]/checkout` + webhook `/api/webhooks/stripe` qui passe le doc
-en `PAID`). PDF : `/api/finance/[id]/pdf`. Conversion du lead en delivery /
-workspace : `/api/crm/leads/[id]/convert`. **Suppression** d'un devis/facture :
-`DELETE /api/admin/finance/[id]`, réservé ADMIN/SUPER_ADMIN (`billing.delete`).
-
-### 7.5 Support & SLA
-
-Ticket helpdesk (`SupportStatus`, `slaDueAt`), visible par son demandeur ; le
-staff (`support.view`) voit tout ; seul le `SUPER_ADMIN` peut résoudre
-(`support.resolve`) et diffuser des avis (`notify.broadcast`).
-
-### 7.6 Scaffold depuis architecture
-
-`/api/workspaces/[id]/scaffold` : `preview:true` renvoie le plan
-(`planFromArchitecture`) sans rien créer ; confirmation → crée projets + backlog.
-UI en deux temps dans `components/workspace/architecture-import.tsx`.
-
-### 7.7 Cron (burndown)
-
+### 9.7 Cron (burndown)
 `GET /api/cron` (Vercel Cron, protégé par `CRON_SECRET`) capture un point de
 burndown (`captureSprintSnapshot`) pour chaque sprint `ACTIVE`.
 
 ---
 
-## 8. Cartographie des pages
+## 10. Référence des pages
 
-Légende : **Route** · accès · données principales · composants clés.
-Toutes les pages sous `(app)` passent par [`app/(app)/layout.tsx`](../app/(app)/layout.tsx)
-(garde session + `AppShell` : sidebar nav, workspaces, notifications, i18n).
+Toutes les pages `(app)` passent par `app/(app)/layout.tsx` : garde session
+(redirige vers `/login`) + `AppShell` (sidebar globale, nav workspace,
+notifications, présence, i18n, applicateur de préférences).
 
-### 8.1 Auth & racine
+### 10.1 Auth & racine
 
 | Route | Accès | Détail |
 |---|---|---|
-| `/` ([page](../app/page.tsx)) | public | redirige vers `/dashboard`. |
-| `/login` ([page](../app/(auth)/login/page.tsx)) | public | connexion email/mot de passe + OAuth GitHub (gate membres de l'org). |
-| `/reset` ([page](../app/(auth)/reset/page.tsx)) | session recovery | définit un nouveau mot de passe après le lien de récupération. |
-| `/client/[token]` ([page](../app/client/[token]/page.tsx)) | token public | **portail client** : avancement projets, milestones, devis/factures — lecture seule, hors `AppShell`. |
+| `/` | public | redirige vers `/dashboard`. |
+| `/login` | public | email/mot de passe + OAuth GitHub (gate : membre de l'org). `?next=` honoré. |
+| `/reset` | session recovery | définit un nouveau mot de passe après le lien de récupération (`updateUser`). |
+| `/client/[token]` | token signé | **portail client** (hors AppShell) : avancement projets, milestones, devis/factures — lecture seule. |
 
-### 8.2 Navigation globale
+### 10.2 Navigation globale
 
-| Route | Accès | Données / rôle |
+| Route | Accès | Données / comportement |
 |---|---|---|
-| `/dashboard` ([page](../app/(app)/dashboard/page.tsx)) | section `dashboard` (tous) | `myTickets`, `workspacesForUser`, `projectsForWorkspace`, `projectProgress` ; activité Git live (`ghUserCommitsSince`, `ghUserOpenPRs`) ; panneau **REBUILD — progression** (clients, projets par niveau, avancement moyen, stack technique) + indicateurs sprint. |
-| `/workspaces` ([page](../app/(app)/workspaces/page.tsx)) | section `workspaces` (tous) | liste des espaces accessibles avec compteurs (projets, membres, tickets). |
-| `/crm` ([page](../app/(app)/crm/page.tsx)) | `canAccessSection(crm)` (ADMIN/LEAD/PM/SALES) | leads + pipeline ; candidats à la conversion (non-CLIENT). |
-| `/support` ([page](../app/(app)/support/page.tsx)) | tous (demandeur voit le sien ; staff voit tout) | `SupportView` ; `canResolve` = `support.resolve`. |
-| `/analytics` ([page](../app/(app)/analytics/page.tsx)) | `canAccessSection(analytics)` (ADMIN/LEAD/PM) | `analytics()` (global + par ingénieur + par workspace) et `doraMetrics()`. |
-| `/reports` ([page](../app/(app)/reports/page.tsx)) | `canAccessSection(reports)` (ADMIN/LEAD/PM) | rapports auto hebdo / sprint / release par workspace. |
-| `/discord` ([page](../app/(app)/discord/page.tsx)) | tous | messagerie temps réel : DM, groupes, threads, réactions, présence, appels LiveKit. |
-| `/rebuild216` ([page](../app/(app)/rebuild216/page.tsx)) | tous | guide CLI + commandes prêtes à coller pour les projets accessibles. |
-| `/how-to-use` ([page](../app/(app)/how-to-use/page.tsx)) | tous | mode d'emploi de la plateforme. |
-| `/profile` ([page](../app/(app)/profile/page.tsx)) | tous | identité, avatar, **Connect with Claude** (clé Anthropic perso), MFA, export RGPD. |
-| `/settings` ([page](../app/(app)/settings/page.tsx)) | tous | préférences (thème, densité, langue, accent, disponibilité…). |
-| `/admin` ([page](../app/(app)/admin/page.tsx)) | `admin.panel` (ADMIN/SUPER_ADMIN) | utilisateurs & rôles, permissions de sections, **Devis & factures** (création, changement de statut, **suppression** ADMIN/SUPER_ADMIN), charges & revenus, agents/agent-docs, usage IA, diffusion d'avis (SUPER_ADMIN). |
-| `/admin/audit` ([page](../app/(app)/admin/audit/page.tsx)) | `admin.panel` | 1000 dernières lignes d'`audit_logs`. |
+| `/dashboard` | section `dashboard` | `myTickets`, `workspacesForUser`, projets + `projectProgress` ; activité Git live (`ghUserCommitsSince`, `ghUserOpenPRs`) ; panneau **REBUILD — progression** (clients, projets par niveau, avancement moyen, stack technique) + indicateurs sprint (complétés, points, assignations actives). |
+| `/workspaces` | section `workspaces` | cartes des espaces accessibles : compteurs projets / membres / tickets. |
+| `/crm` | `canAccessSection(crm)` | leads + pipeline ; liste des non-CLIENT pour l'étape de conversion. |
+| `/support` | tous | demandeur → ses tickets ; staff → tous. `SupportView`, `canResolve = support.resolve`. |
+| `/analytics` | `canAccessSection(analytics)` | `analytics()` (global + par ingénieur + par workspace) et `doraMetrics()`. |
+| `/reports` | `canAccessSection(reports)` | génération de rapports hebdo / sprint / release par workspace. |
+| `/discord` | tous | DM, groupes, threads, réactions, présence, appels LiveKit ; badge DM non lus. |
+| `/rebuild216` | tous | guide CLI + commandes prêtes à coller pour les projets accessibles. |
+| `/how-to-use` | tous | mode d'emploi de la plateforme. |
+| `/profile` | tous | identité, avatar, **Connect with Claude** (clé Anthropic perso), MFA, export RGPD. |
+| `/settings` | tous | préférences : thème, densité, langue, accent, disponibilité, skills/tags, DND… |
+| `/admin` | `admin.panel` | utilisateurs & rôles, permissions de sections, **Modèle IA plateforme** (SUPER_ADMIN), **Devis & factures** (créer / changer le statut / **supprimer** ADMIN+SUPER_ADMIN), charges & revenus, agents & agent-docs, usage IA, diffusion d'avis (SUPER_ADMIN). |
+| `/admin/audit` | `admin.panel` | 1000 dernières lignes d'`audit_logs` (résolution des noms). |
 
-### 8.3 Espace de travail (`/workspace/[id]`)
+### 10.3 Espace de travail `/workspace/[id]`
 
-| Route | Détail |
+| Route | Données / comportement |
 |---|---|
-| `/workspace/[id]` ([page](../app/(app)/workspace/[id]/page.tsx)) | redirige vers `…/overview`. |
-| `…/overview` ([page](../app/(app)/workspace/[id]/overview/page.tsx)) | tableau de bord de l'espace : projets, membres + charge (`activeWorkloadByUser`), commits/PR/déploiements. |
-| `…/projects` ([page](../app/(app)/workspace/[id]/projects/page.tsx)) | projets groupés (`ProjectGroup`) avec avancement ; création/réorg. |
-| `…/ide` ([page](../app/(app)/workspace/[id]/ide/page.tsx)) | IDE web (Monaco) sur le repo réel : `repoFiles`, branches, tickets ; édition via Contents API. |
-| `…/git` ([page](../app/(app)/workspace/[id]/git/page.tsx)) | Git & CI/CD : branches, commits, PR (revue/merge), déploiements, état CI. |
-| `…/chat` ([page](../app/(app)/workspace/[id]/chat/page.tsx)) | chat d'équipe de l'espace (`TeamChat`). |
-| `…/documents` ([page](../app/(app)/workspace/[id]/documents/page.tsx)) | fichiers partagés (contrats, specs, assets). |
-| `…/calendar` ([page](../app/(app)/workspace/[id]/calendar/page.tsx)) | agenda : échéances tickets, sprints, milestones, réunions (ICS). |
-| `…/settings` ([page](../app/(app)/workspace/[id]/settings/page.tsx)) | membres + configuration de l'espace (repo, techno, portail client…). |
+| `/workspace/[id]` | redirige vers `…/overview`. |
+| `…/overview` | projets, membres + charge (`activeWorkloadByUser`), commits/PR/déploiements. |
+| `…/projects` | projets **groupés** (`ProjectGroup`) + avancement (`projectProgress`) ; création / réorg. |
+| `…/ide` | IDE web Monaco sur le repo réel : `repoFiles`, branches, tickets ; édition via Contents API. |
+| `…/git` | Git & CI/CD : branches, commits, PR (revue/merge), déploiements, état CI (Actions). |
+| `…/chat` | chat d'équipe de l'espace (`TeamChat`, temps réel). |
+| `…/documents` | fichiers partagés (contrats, specs, assets). |
+| `…/calendar` | agenda : échéances tickets, sprints, milestones, réunions (export ICS). |
+| `…/settings` | membres + configuration de l'espace (repo, technos, lien portail, agent…). |
 
-### 8.4 Projet (`/workspace/[id]/projects/[pid]`)
+### 10.4 Projet `/workspace/[id]/projects/[pid]`
 
-En-tête + onglets (`ProjectTabs`) via [le layout projet](../app/(app)/workspace/[id]/projects/[pid]/layout.tsx) ;
-contrôle de statut éditable si `project.update`.
+En-tête + onglets (`ProjectTabs`) via le layout projet ; contrôle de statut
+éditable si `project.update` (`ProjectStatusControl`).
 
-| Onglet / Route | Détail |
+| Onglet | Données / comportement |
 |---|---|
-| `…/board` ([page](../app/(app)/workspace/[id]/projects/[pid]/board/page.tsx)) | **Kanban** par statut (drag&drop) ; suppression de ticket si ADMIN/LEAD. |
-| `…/backlog` ([page](../app/(app)/workspace/[id]/projects/[pid]/backlog/page.tsx)) | backlog + affectation aux sprints. |
-| `…/list` ([page](../app/(app)/workspace/[id]/projects/[pid]/list/page.tsx)) | vue tableau dense (type, priorité, statut, assigné). |
-| `…/timeline` ([page](../app/(app)/workspace/[id]/projects/[pid]/timeline/page.tsx)) | milestones + % d'avancement. |
-| `…/dashboard` ([page](../app/(app)/workspace/[id]/projects/[pid]/dashboard/page.tsx)) | burndown sprint, vélocité, forecast, répartition type/priorité. |
-| `…/tests` ([page](../app/(app)/workspace/[id]/projects/[pid]/tests/page.tsx)) | QA : `TestCase`/`TestRun`, bug auto sur échec. |
-| `…/docs` ([page](../app/(app)/workspace/[id]/projects/[pid]/docs/page.tsx)) | éditeur de doc projet (`DocEditor`). |
-| `…/documents` ([page](../app/(app)/workspace/[id]/projects/[pid]/documents/page.tsx)) | fichiers du projet. |
+| `…/board` | **Kanban** par statut (drag&drop, `KanbanBoard`) ; suppression de ticket si ADMIN/LEAD. |
+| `…/backlog` | backlog + affectation aux sprints. |
+| `…/list` | vue tableau dense (type, priorité, statut, assigné). |
+| `…/timeline` | milestones + % d'avancement (`milestoneProgress`). |
+| `…/dashboard` | burndown sprint, vélocité, forecast, répartition type/priorité. |
+| `…/tests` | QA : `TestCase`/`TestRun`, bug auto sur échec (`TestPanel`). |
+| `…/docs` | éditeur de doc projet (`DocEditor`). |
+| `…/documents` | fichiers du projet. |
 
 ---
 
-## 9. Routes API (par domaine)
+## 11. Référence des routes API
 
-- **Auth/session** : `api/auth/me`, `api/auth/logout`, `api/health`.
-- **CLI (Bearer)** : `api/cli/{login,refresh,token,context,projects,repos,status,integration,usage}`, `api/cli/ticket(/create)`, `api/cli/document(/[id])`.
-- **Tickets** : `api/tickets/[id]` (+ `comments`, `links`, `time`, `watchers`, `fields`, `attachments`), `api/projects/[id]/{tickets,reorder,custom-fields,test-cases,forecast}`, `api/comments/[id]`, `api/attachments/[id]`, `api/sprints/[id]/snapshot`, `api/test-cases/[id]/runs`.
-- **Workspaces/projets** : `api/workspaces(/[id])` (+ `projects`, `members`, `groups`, `messages`, `meetings`, `scaffold`, `agent`, `seed-ci`, `portal-link`), `api/projects/[id]`.
-- **Git/CI** : `api/git/[wsId]/{tree,files,file,commit(s),diff,move,delete,branches,actions,releases,prs,scaffold-ci,vercel,ticket-link}` et sous-routes PR (`merge`, `reviews`, `comments`, `diff`).
-- **IA** : `api/ai/{review,chat,docs,triage,summary,standup,changelog}`.
-- **CRM/Finance** : `api/crm/leads(/[id])(/quote|/convert)`, `api/admin/finance(/[id])`, `api/admin/transactions(/[id])`, `api/finance/[id]/{pdf,checkout}`.
-- **Support** : `api/support(/[id])(/comments)`.
-- **Admin** : `api/admin/{users(/[id]),permissions,agents(/[id]/files),agent-docs,notify-role}`.
-- **Discord** : `api/discord/{members,groups,threads(/[threadId]),dm/[userId],notes/[userId],relationships,reactions,search,unread,call-token,admin/threads}`, `api/presence`, `api/events`.
-- **Divers** : `api/profile(/anthropic|/export)`, `api/notifications`, `api/search`, `api/reports`, `api/export`, `api/import/{leads,tickets}`, `api/documents(/[id])`, `api/cron`, `api/webhooks/{github/[wsId],stripe}`, `api/client/[token]/validate`.
+Convention : **[méthodes]** · *autorisation* · comportement. Sauf mention,
+l'autorisation passe par `getSessionUser()` + un gate. Les routes `/api/cli/**`
+utilisent `userFromBearer` (Bearer), pas les cookies.
+
+### 11.1 Auth & système
+| Route | Méthodes | Auth | Comportement |
+|---|---|---|---|
+| `auth/me` | GET | session | utilisateur courant |
+| `auth/logout` | POST | — | invalide la session |
+| `health` | GET | public | sonde de santé |
+| `cron` | GET | `CRON_SECRET` | snapshot burndown des sprints actifs |
+| `events` | GET, POST | session | flux SSE temps réel / émission |
+| `presence` | POST | session | mise à jour de présence |
+| `search` | GET | (interne) | recherche globale scoping membership |
+
+### 11.2 CLI (Bearer)
+| Route | Méthodes | Comportement |
+|---|---|---|
+| `cli/login` | POST | sign-in mot de passe → JWT + refresh + **cliToken** (rbld_) |
+| `cli/refresh` | POST | échange refresh token → nouveau JWT |
+| `cli/token` | POST, DELETE | mint un CLI token non-expirant / révoque tous |
+| `cli/status` | GET | état de connexion CLI (session) |
+| `cli/context` | GET | contexte projet (tickets, contrats, skills) pour l'agent |
+| `cli/projects` | GET | projets accessibles |
+| `cli/repos` | GET | repos de l'org |
+| `cli/integration` | GET, POST | intégration de branches → PR + revue IA |
+| `cli/ticket` | POST | met à jour un ticket (statut + **DoD gate** sur DONE) |
+| `cli/ticket/create` | POST | crée un ticket complet (backlog) |
+| `cli/document`, `cli/document/[id]` | POST / GET | upload / lecture (ex. screenshots) |
+| `cli/usage` | POST | enregistre le coût IA d'un run |
+
+### 11.3 Tickets, projets, QA, temps
+| Route | Méthodes | Auth | Comportement |
+|---|---|---|---|
+| `tickets/[id]` | GET, PATCH, DELETE | DELETE = `ticket.delete` | lecture / édition / suppression |
+| `tickets/[id]/comments` | POST | session | commentaire |
+| `tickets/[id]/links` | POST, DELETE | session | liens (BLOCKS/RELATES/DUPLICATES) |
+| `tickets/[id]/watchers` | POST, DELETE | session | suivi |
+| `tickets/[id]/time` | GET, POST | — | suivi du temps |
+| `tickets/[id]/fields` | GET, PUT | — | valeurs de champs custom |
+| `tickets/[id]/attachments` | POST | session | pièce jointe |
+| `comments/[id]` | PATCH, DELETE | session | édition / suppression de commentaire |
+| `attachments/[id]` | GET, DELETE | session | téléchargement / suppression |
+| `projects/[id]` | GET, PATCH, DELETE | — | CRUD projet |
+| `projects/[id]/tickets` | GET, POST | — | tickets du projet |
+| `projects/[id]/reorder` | POST | — | réordonnancement Kanban |
+| `projects/[id]/custom-fields` | GET, POST | — | champs custom |
+| `projects/[id]/test-cases` | GET, POST | — | cas de test |
+| `projects/[id]/forecast` | GET | — | prévision de complétion |
+| `test-cases/[id]/runs` | GET, POST | — | exécutions de test |
+| `sprints/[id]/snapshot` | GET, POST | — | snapshot burndown |
+
+### 11.4 Workspaces
+| Route | Méthodes | Auth | Comportement |
+|---|---|---|---|
+| `workspaces` | GET, POST | POST = `workspace.create` | liste / création |
+| `workspaces/[id]` | GET, PATCH, DELETE | PATCH/DELETE = `workspace.edit` | CRUD espace |
+| `workspaces/[id]/projects` | GET, POST | — | projets de l'espace |
+| `workspaces/[id]/members` | GET, POST | session | membres |
+| `workspaces/[id]/groups`, `…/groups/[gid]` | GET/POST, PATCH/DELETE | — | groupes de projets |
+| `workspaces/[id]/messages` | GET, POST | session | chat d'équipe |
+| `workspaces/[id]/meetings`, `…/meetings/ics` | GET/POST, GET | session | réunions + export ICS |
+| `workspaces/[id]/scaffold` | POST | — | preview / création depuis architecture |
+| `workspaces/[id]/agent` | GET, PUT | `workspace.edit` | config de l'agent |
+| `workspaces/[id]/seed-ci` | POST | — | seed du workflow CI |
+| `workspaces/[id]/portal-link` | GET | — | lien signé du portail client |
+
+### 11.5 Git & CI/CD (`git/[wsId]/…`)
+| Route | Méthodes | Auth | Comportement |
+|---|---|---|---|
+| `tree`, `files`, `file` | GET / GET / GET,PUT | — | arbre, liste, lecture/écriture de fichier (IDE) |
+| `commit`, `commit/[sha]`, `commits` | POST / GET / GET | — | créer un commit, diff d'un commit, liste |
+| `diff` | GET | — | diff |
+| `move`, `delete` | POST | — | renommer / supprimer un fichier |
+| `branches`, `branches/cleanup` | GET,POST,DELETE / POST | — | branches + nettoyage |
+| `prs`, `prs/[number]/diff`, `…/comments`, `…/reviews`, `…/merge` | GET / GET / POST / GET,POST / POST | reviews=`pr.approve`, merge=`pr.merge` | PR : liste, diff, commentaires, revues, merge |
+| `actions` | GET, POST | — | GitHub Actions (runs, rerun/cancel) |
+| `releases` | GET, POST | POST = `pr.merge` | releases |
+| `vercel` | GET, POST | POST = `pr.merge` | déploiements Vercel |
+| `scaffold-ci`, `ticket-link` | POST / GET | — | seed CI, lien commit↔ticket |
+
+### 11.6 IA
+| Route | Méthodes | Auth | |
+|---|---|---|---|
+| `ai/chat` | POST | `copilot.use` | copilote |
+| `ai/review`, `ai/docs`, `ai/triage`, `ai/summary`, `ai/standup`, `ai/changelog` | POST | (interne) | revue, docs, triage, résumé, standup, changelog |
+
+### 11.7 CRM & Finance
+| Route | Méthodes | Auth | |
+|---|---|---|---|
+| `crm/leads` | GET, POST | `crm.view` / `crm.manage` | leads |
+| `crm/leads/[id]` | PATCH, DELETE | `crm.manage` | édition / suppression |
+| `crm/leads/[id]/quote` | POST | — | devis IA depuis lead |
+| `crm/leads/[id]/convert` | POST | `crm.manage` | conversion → delivery/workspace |
+| `admin/finance` | GET, POST | `billing.manage` | devis/factures |
+| `admin/finance/[id]` | PATCH, DELETE | PATCH=`billing.manage`, **DELETE=`billing.delete`** | statut / **suppression** |
+| `admin/transactions`, `…/[id]` | GET,POST / PATCH,DELETE | `billing.manage` | charges & revenus |
+| `finance/[id]/pdf` | GET | — | PDF du document |
+| `finance/[id]/checkout` | POST | — | lien Stripe Checkout |
+
+### 11.8 Support
+| Route | Méthodes | Comportement |
+|---|---|---|
+| `support` | GET, POST, DELETE | liste / création / suppression |
+| `support/[id]` | PATCH, DELETE | statut / suppression |
+| `support/[id]/comments` | GET, POST | fil de discussion |
+
+### 11.9 Admin
+| Route | Méthodes | Auth | |
+|---|---|---|---|
+| `admin/users`, `…/[id]` | GET,POST / PATCH,DELETE | `isAdmin` | gestion utilisateurs/rôles |
+| `admin/settings` | GET, PUT | GET=`admin.panel`, **PUT=SUPER_ADMIN** | lire/changer le modèle IA global |
+| `admin/permissions` | GET, PUT | session (admin via page) | matrice de sections |
+| `admin/agents`, `…/[id]`, `…/[id]/files` | GET,POST / GET,PATCH,DELETE / PUT,DELETE | `isAdmin` | agents IA & leurs fichiers |
+| `admin/agent-docs` | GET, PUT | `admin.panel` | docs d'agent |
+| `admin/notify-role` | POST | `notify.broadcast` | diffusion par rôle |
+
+### 11.10 Discord
+| Route | Méthodes | Comportement (toutes : session) |
+|---|---|---|
+| `discord/members` | GET | annuaire |
+| `discord/groups` | POST | créer un groupe |
+| `discord/threads`, `…/[threadId]` | GET / GET,POST,DELETE | threads |
+| `discord/dm/[userId]` | GET, POST | messages directs |
+| `discord/notes/[userId]` | GET, PUT | notes privées sur un membre |
+| `discord/relationships` | GET, POST | relations |
+| `discord/reactions` | POST | réactions |
+| `discord/search` | GET | recherche |
+| `discord/unread` | GET | compteur non-lus |
+| `discord/call-token` | POST | jeton LiveKit (appel) |
+| `discord/admin/threads` | GET | modération |
+
+### 11.11 Profil, documents, divers
+| Route | Méthodes | Auth | |
+|---|---|---|---|
+| `profile` | GET, PATCH | session | profil |
+| `profile/anthropic` | GET, PUT, DELETE | session | clé Claude perso (jamais réaffichée) |
+| `profile/export` | GET | (token) | export RGPD |
+| `notifications` | GET, PATCH, DELETE | session | notifications (lire/supprimer) |
+| `documents`, `documents/[id]` | GET,POST / GET,DELETE | DELETE=`workspace.edit` | fichiers |
+| `reports` | GET | session | rapports |
+| `export` | GET | (token) | export de données |
+| `import/leads`, `import/tickets` | POST | — | imports CSV |
+| `client/[token]/validate` | POST | token | validation milestone côté client |
+| `webhooks/github/[wsId]` | POST | `GITHUB_WEBHOOK_SECRET` | push/PR/CI → Supabase |
+| `webhooks/stripe` | POST | signature Stripe | paiement → `PAID` |
 
 ---
 
-## 10. Pour aller plus loin
+## 12. Modules `lib/`
 
-- Contrats partagés agent/serveur : [`agent_contracts/`](../agent_contracts).
-- Doctrine & skills de l'agent CLI : [`cli/agent/`](../cli/agent).
-- Prompts versionnés : [`prompts/`](../prompts).
-- Migrations base : [`supabase/`](../supabase) (`all.sql` = tout).
+| Module | Rôle |
+|---|---|
+| `data.ts` | client service-role `sb()`, `SEL` (alias colonnes), prefs, annuaire users |
+| `queries.ts` | sélecteurs lecture (workspaces, projets, tickets, sprints, vélocité, forecast, burndown, repo files…) |
+| `mutations.ts` | écritures : tickets/commentaires/liens/watchers, projets, fichiers/commits/branches, temps, `audit`, `createNotification`, `uniqueShortCode` |
+| `auth.ts` | `can()`, `isAdmin()`, MATRIX, tiers |
+| `auth/session.ts` | `getSessionUser`, `resolveAppUser` |
+| `auth/guard.ts`, `auth/decide.ts` | gardes objet-niveau (anti-IDOR) |
+| `permissions.ts` | sections, `canAccessSection`, `sectionsAllowedFor`, matrice |
+| `cli-auth.ts` | `userFromBearer`, mint/résolution des CLI tokens (rbld_), heartbeat |
+| `github.ts` | toute l'intégration GitHub (Octokit) |
+| `ai.ts` | features IA + `trackedCreate` (résout le modèle actif) + schémas JSON |
+| `ai-usage.ts` | gouvernance/coûts IA (ALS, budget, agrégats) |
+| `settings.ts` | réglages plateforme (`app_settings`) : modèle IA actif (`getAiModel`/`setAiModel`, `AI_MODELS`) |
+| `analytics.ts` / `dora.ts` | analytics (global/ingénieur/workspace) + DORA |
+| `reports.ts` | génération de rapports (markdown) |
+| `finance.ts` | totaux, TVA, formatage monnaie, `summarize` |
+| `stripe.ts`, `email.ts`, `slack.ts`, `vercel.ts` | intégrations |
+| `discord.ts` | annuaire + LiveKit |
+| `events.ts`, `realtime-bridge.ts` | SSE temps réel + présence |
+| `storage.ts`, `uploads.ts` | objets/uploads (Supabase Storage ou base64) |
+| `portal.ts` | tokens signés du portail client |
+| `git-gate.ts` | gates de qualité du flux PR |
+| `ticket-number.ts` | allocation atomique du `shortId` |
+| `csv.ts`, `pagination.ts`, `ratelimit.ts`, `log.ts`, `utils.ts` | utilitaires |
+| `i18n.ts`, `i18n-server.ts` | i18n (en/fr/ar) |
+| `doc-loader.ts` | lecture des docs agent/contrats/prompts |
+| `types.ts` | tous les types + META |
+
+---
+
+## 13. Migrations & exploitation
+
+### Migrations SQL (`supabase/`, à exécuter à la main)
+`all.sql` regroupe tout. Fichiers notables : `schema.sql`, `auth.sql`
+(profiles + trigger signup), `seed.sql`, `storage.sql`, `permissions.sql`
+(section_permissions), `ai-usage.sql`, `cli-sessions.sql`, **`cli-tokens.sql`**
+(tokens CLI non-expirants), `user-ai-keys.sql` (Connect with Claude),
+**`app-settings.sql`** (réglages plateforme : modèle IA),
+`project-groups.sql`, `crm-fixes.sql`, `discord*.sql`, `agents*.sql`,
+`time-tracking.sql`, `qa-support.sql`, `custom-fields.sql`, `vercel.sql`,
+`super-admin.sql`, `admin-user.sql`.
+
+### Déploiement (Vercel)
+- Build Turbopack. **Ne pas** activer `output: "standalone"` ni
+  `"type":"module"` (→ `ERR_REQUIRE_ESM`).
+- Cron quotidien `/api/cron` (Bearer `CRON_SECRET`).
+- Diagnostic d'une 500 authentifiée : `vercel logs <deployment-url> --json`
+  (les access logs seuls ne montrent pas la stack RSC).
+
+### Observabilité
+- Sentry opt-in (`instrumentation.ts`, `SENTRY_DSN`).
+- Audit applicatif : `audit_logs` (`/admin/audit`).
+
+---
+
+*Pour aller plus loin : `agent_contracts/` (contrats agent↔serveur),
+`cli/agent/` (doctrine + skills), `prompts/` (prompts versionnés),
+`supabase/` (migrations).*

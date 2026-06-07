@@ -5,7 +5,13 @@
 import Anthropic from "@anthropic-ai/sdk"
 
 import { currentApiKey, recordAiUsage } from "./ai-usage"
+import { getAiModel } from "./settings"
 
+// Compile-time default. The *effective* model is resolved per call in
+// trackedCreate() from the runtime setting a SUPER_ADMIN controls (see
+// lib/settings.ts) — changing it there applies to everyone. The per-feature
+// `model: MODEL` below are just type-required placeholders; trackedCreate
+// overrides them with the active model.
 const MODEL = process.env.AI_MODEL ?? "claude-opus-4-8"
 
 export class AINotConfiguredError extends Error {
@@ -33,8 +39,10 @@ async function trackedCreate(
   // else the shared server client.
   const key = currentApiKey()
   const client = key ? new Anthropic({ apiKey: key }) : getClient()
-  const res = await client.messages.create(params)
-  await recordAiUsage(params.model as string, res.usage)
+  // The active model is a runtime setting a SUPER_ADMIN can change for everyone.
+  const model = await getAiModel()
+  const res = await client.messages.create({ ...params, model })
+  await recordAiUsage(model, res.usage)
   return res
 }
 
