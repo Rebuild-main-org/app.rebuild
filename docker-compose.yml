@@ -1,0 +1,16 @@
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Provide these via a .env file or your orchestrator's secrets.
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      REALTIME_BRIDGE: ${REALTIME_BRIDGE:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      CRON_SECRET: ${CRON_SECRET:-}
+    restart: unless-stopped

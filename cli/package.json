@@ -1,0 +1,21 @@
+{
+  "name": "rebuild216",
+  "version": "1.0.0",
+  "description": "Agentic delivery CLI for REBUILD — runs Claude Code on a project's tickets.",
+  "type": "module",
+  "bin": {
+    "rebuild216": "./rebuild216.mjs"
+  },
+  "files": [
+    "rebuild216.mjs",
+    "mcp-rebuild.mjs",
+    "README.md"
+  ],
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.160",
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$comment": "Copie versionnée de REVIEW_SCHEMA — source de vérité: lib/ai.ts (L72). codeReview() renvoie CodeReview.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "score": { "type": "string", "enum": ["A", "B", "C", "D"] },
+    "summary": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+          "title": { "type": "string" },
+          "detail": { "type": "string" }
+        },
+        "required": ["severity", "title", "detail"]
+      }
+    }
+  },
+  "required": ["score", "summary", "findings"]
+}

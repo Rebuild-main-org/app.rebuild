@@ -1,0 +1,54 @@
+{
+  "$comment": "Copie versionnée de SCAFFOLD_SCHEMA — source de vérité: lib/ai.ts (L335). planFromArchitecture() renvoie ScaffoldPlan.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "shortCode": { "type": "string", "description": "2-5 uppercase letters, e.g. WEB" },
+          "description": { "type": "string" },
+          "tickets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ref": { "type": "string", "description": "unique stable id within the plan, e.g. WEB-1" },
+                "title": { "type": "string" },
+                "description": { "type": "string" },
+                "type": { "type": "string", "enum": ["TASK", "BUG", "FEATURE", "SPIKE", "EPIC"] },
+                "priority": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+                "points": { "type": ["number", "null"] },
+                "subtasks": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "concrete child sub-task titles that break this ticket down"
+                },
+                "links": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "to": { "type": "string", "description": "ref of another ticket in this plan" },
+                      "type": { "type": "string", "enum": ["BLOCKS", "RELATES", "DUPLICATES"] }
+                    },
+                    "required": ["to", "type"]
+                  }
+                }
+              },
+              "required": ["ref", "title", "description", "type", "priority", "points", "subtasks", "links"]
+            }
+          }
+        },
+        "required": ["name", "shortCode", "description", "tickets"]
+      }
+    }
+  },
+  "required": ["projects"]
+}

@@ -1,0 +1,22 @@
+{
+  "$comment": "Copie versionnée de QUOTE_SCHEMA — source de vérité: lib/ai.ts (L234). quoteFromLead() renvoie QuoteDraft.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": { "type": "string" },
+          "quantity": { "type": "number" },
+          "unitPrice": { "type": "number" }
+        },
+        "required": ["description", "quantity", "unitPrice"]
+      }
+    },
+    "notes": { "type": "string" }
+  },
+  "required": ["items", "notes"]
+}

@@ -1,0 +1,12 @@
+{
+  "$comment": "Copie versionnée de TRIAGE_SCHEMA — source de vérité: lib/ai.ts (L188). triageTicket() renvoie TriageSuggestion.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "type": { "type": "string", "enum": ["TASK", "BUG", "FEATURE", "SPIKE"] },
+    "priority": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+    "suggestedAssigneeId": { "type": ["string", "null"] },
+    "reason": { "type": "string" }
+  },
+  "required": ["type", "priority", "suggestedAssigneeId", "reason"]
+}
