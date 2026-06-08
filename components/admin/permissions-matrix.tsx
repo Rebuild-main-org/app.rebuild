@@ -15,8 +15,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
+// Keep in sync with SECTIONS in lib/permissions.ts (server-only, can't import here).
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard" },
+  { key: "blueprints", label: "Blueprints" },
   { key: "workspaces", label: "Workspaces" },
   { key: "crm", label: "CRM" },
   { key: "support", label: "Support" },

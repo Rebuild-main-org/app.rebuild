@@ -85,6 +85,53 @@ export interface Blueprint {
   updatedAt: string
 }
 
+// --- Spec wizard form (shared by the UI and the AI extractor) ---------------
+export interface SpecUseCase { name: string; actor: string; acceptance: string }
+export interface SpecLatencyPath { path: string; p99: string }
+export interface SpecConsistency { domain: string; level: "strong" | "eventual" }
+export interface SpecEntity { name: string; accessPatterns: string; readWriteRatio: string; pii: boolean }
+export interface SpecIntegration { name: string; slaMs: string; onFailure: string }
+
+export interface SpecForm {
+  name: string
+  summary: string
+  deployTarget: string
+  stack: string
+  useCases: SpecUseCase[]
+  scale: string
+  availabilitySlo: string
+  errorBudget: string
+  retention: string
+  latencyPaths: SpecLatencyPath[]
+  consistency: SpecConsistency[]
+  compliance: string[]
+  entities: SpecEntity[]
+  integrations: SpecIntegration[]
+  coverageTarget: string
+  loadTestTarget: string
+  qualityGates: string
+}
+
+export const EMPTY_SPEC_FORM: SpecForm = {
+  name: "",
+  summary: "",
+  deployTarget: "",
+  stack: "",
+  useCases: [{ name: "", actor: "", acceptance: "" }],
+  scale: "",
+  availabilitySlo: "",
+  errorBudget: "",
+  retention: "",
+  latencyPaths: [{ path: "", p99: "" }],
+  consistency: [{ domain: "", level: "strong" }],
+  compliance: [],
+  entities: [{ name: "", accessPatterns: "", readWriteRatio: "", pii: false }],
+  integrations: [{ name: "", slaMs: "", onFailure: "" }],
+  coverageTarget: "",
+  loadTestTarget: "",
+  qualityGates: "",
+}
+
 export function prereqsGate(prereqs: Record<string, boolean>): boolean {
   return PREREQ_ITEMS.every((p) => prereqs[p.key] === true)
 }

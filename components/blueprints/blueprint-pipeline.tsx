@@ -23,6 +23,7 @@ import {
   pendingGates,
   type Blueprint,
   type GateKey,
+  type SpecForm,
 } from "@/lib/blueprint-types"
 import { SpecWizard } from "@/components/blueprints/spec-wizard"
 import { Button } from "@/components/ui/button"
@@ -74,21 +75,36 @@ export function BlueprintPipeline({
   const [acceptanceYaml, setAcceptanceYaml] = useState(initial.acceptanceYaml)
   const [validation, setValidation] = useState<{ ok: boolean; missing: string[]; present: string[] } | null>(null)
   const [intakeMode, setIntakeMode] = useState<"wizard" | "yaml">(initial.specYaml.trim() ? "yaml" : "wizard")
+  const [wizardForm, setWizardForm] = useState<SpecForm | undefined>(undefined)
+  const [wizardKey, setWizardKey] = useState(0)
   const mdInputRef = useRef<HTMLInputElement>(null)
 
   const readOnly = bp.status === "CONVERTED"
 
-  // Fill the Intake from a markdown file (architecture doc / spec). The content
-  // becomes the spec source — critiqueSpec/planFromArchitecture accept free text.
+  // Import a markdown brief/doc and PRE-FILL the guided assistant: the doc is
+  // sent to the AI extractor which returns the structured wizard fields. Falls
+  // back to dropping the raw text in the YAML editor if extraction is unavailable.
   async function importMd(file: File) {
     const text = await file.text()
     if (!text.trim()) {
       toast.error("Fichier vide")
       return
     }
-    setSpec(text)
-    setIntakeMode("yaml")
-    await savePatch({ specYaml: text }, `Importé depuis ${file.name}`)
+    setBusy("import")
+    try {
+      const data = await api("/extract", { method: "POST", body: JSON.stringify({ content: text }) })
+      setWizardForm(data.form as SpecForm)
+      setWizardKey((k) => k + 1)
+      setIntakeMode("wizard")
+      toast.success(`Assistant pré-rempli depuis ${file.name}`)
+    } catch (e) {
+      setSpec(text)
+      setIntakeMode("yaml")
+      await savePatch({ specYaml: text }, `Importé (brut) depuis ${file.name}`)
+      toast.message(e instanceof Error ? e.message : "Extraction IA indisponible — doc mis dans l'éditeur YAML")
+    } finally {
+      setBusy(null)
+    }
   }
 
   async function api(path: string, init?: RequestInit) {
@@ -265,8 +281,8 @@ export function BlueprintPipeline({
                 <Button variant={intakeMode === "yaml" ? "default" : "outline"} size="sm" onClick={() => setIntakeMode("yaml")}>
                   Éditeur YAML
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => mdInputRef.current?.click()}>
-                  <FileUp className="size-4" /> Importer .md
+                <Button variant="outline" size="sm" className="gap-1.5" disabled={busy === "import"} onClick={() => mdInputRef.current?.click()}>
+                  {busy === "import" ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4" />} Importer .md
                 </Button>
                 <input
                   ref={mdInputRef}
@@ -287,9 +303,11 @@ export function BlueprintPipeline({
         <CardContent className="space-y-3">
           {intakeMode === "wizard" && !readOnly ? (
             <SpecWizard
+              key={wizardKey}
               blueprintId={bp.id}
               initialFigma={bp.figmaUrl}
               initialDocuments={bp.documents ?? []}
+              initialForm={wizardForm}
               onSpec={(yaml) => {
                 setSpec(yaml)
                 setIntakeMode("yaml")

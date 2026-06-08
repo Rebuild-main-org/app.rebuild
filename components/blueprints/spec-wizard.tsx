@@ -4,58 +4,31 @@ import { useMemo, useState } from "react"
 import { Check, Copy, Download, Loader2, Plus, Trash2, Upload, X } from "lucide-react"
 import { toast } from "sonner"
 
-import type { BlueprintDoc } from "@/lib/blueprint-types"
+import { EMPTY_SPEC_FORM, type BlueprintDoc, type SpecForm } from "@/lib/blueprint-types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 
-// --- form model -------------------------------------------------------------
-type UseCase = { name: string; actor: string; acceptance: string }
-type LatencyPath = { path: string; p99: string }
-type ConsistencyDomain = { domain: string; level: "strong" | "eventual" }
-type Entity = { name: string; accessPatterns: string; readWriteRatio: string; pii: boolean }
-type Integration = { name: string; slaMs: string; onFailure: string }
+// --- form model (shared type; see lib/blueprint-types.ts) -------------------
+type Form = SpecForm
 
-interface Form {
-  name: string
-  summary: string
-  deployTarget: string
-  stack: string
-  useCases: UseCase[]
-  scale: string
-  availabilitySlo: string
-  errorBudget: string
-  retention: string
-  latencyPaths: LatencyPath[]
-  consistency: ConsistencyDomain[]
-  compliance: string[]
-  entities: Entity[]
-  integrations: Integration[]
-  coverageTarget: string
-  loadTestTarget: string
-  qualityGates: string
-}
-
-const EMPTY: Form = {
-  name: "",
-  summary: "",
-  deployTarget: "",
-  stack: "",
-  useCases: [{ name: "", actor: "", acceptance: "" }],
-  scale: "",
-  availabilitySlo: "",
-  errorBudget: "",
-  retention: "",
-  latencyPaths: [{ path: "", p99: "" }],
-  consistency: [{ domain: "", level: "strong" }],
-  compliance: [],
-  entities: [{ name: "", accessPatterns: "", readWriteRatio: "", pii: false }],
-  integrations: [{ name: "", slaMs: "", onFailure: "" }],
-  coverageTarget: "",
-  loadTestTarget: "",
-  qualityGates: "",
+// Seed the wizard from an (optionally AI-extracted) form, keeping at least one
+// editable row in each repeatable list.
+function seedForm(f?: SpecForm): Form {
+  if (!f) return structuredClone(EMPTY_SPEC_FORM)
+  const arr = <T,>(a: T[] | undefined, fallback: T[]) => (a && a.length ? a : fallback)
+  return {
+    ...EMPTY_SPEC_FORM,
+    ...f,
+    useCases: arr(f.useCases, EMPTY_SPEC_FORM.useCases),
+    latencyPaths: arr(f.latencyPaths, EMPTY_SPEC_FORM.latencyPaths),
+    consistency: arr(f.consistency, EMPTY_SPEC_FORM.consistency),
+    entities: arr(f.entities, EMPTY_SPEC_FORM.entities),
+    integrations: arr(f.integrations, EMPTY_SPEC_FORM.integrations),
+    compliance: f.compliance ?? [],
+  }
 }
 
 const COMPLIANCE_OPTIONS = ["GDPR", "PCI-DSS", "HIPAA", "SOC2"]
@@ -158,15 +131,17 @@ export function SpecWizard({
   blueprintId,
   initialFigma,
   initialDocuments,
+  initialForm,
   onSpec,
 }: {
   blueprintId: string
   initialFigma: string
   initialDocuments: BlueprintDoc[]
+  initialForm?: SpecForm
   onSpec: (yaml: string) => void
 }) {
   const [step, setStep] = useState(0)
-  const [f, setF] = useState<Form>(EMPTY)
+  const [f, setF] = useState<Form>(() => seedForm(initialForm))
   const [figmaUrl, setFigmaUrl] = useState(initialFigma)
   const [docs, setDocs] = useState<BlueprintDoc[]>(initialDocuments ?? [])
   const [uploading, setUploading] = useState(false)

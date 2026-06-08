@@ -7,6 +7,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { currentApiKey, recordAiUsage } from "./ai-usage"
 import { getAiModel } from "./settings"
 import { loadSystemPrompt } from "./doc-loader"
+import type { SpecForm } from "./blueprint-types"
 
 // Compile-time default. The *effective* model is resolved per call in
 // trackedCreate() from the runtime setting a SUPER_ADMIN controls (see
@@ -635,4 +636,101 @@ export async function critiqueSpec(input: {
   })
   const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("")
   return JSON.parse(text) as SpecCritiqueResult
+}
+
+// --- Spec form extraction (fill the guided wizard from a markdown doc) -------
+// Reads a free-form architecture/brief markdown and extracts the structured
+// fields of the intake wizard. Never invents NFR numbers — leaves fields empty
+// when the document doesn't state them.
+const SPEC_FORM_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: { type: "string" },
+    summary: { type: "string" },
+    deployTarget: { type: "string" },
+    stack: { type: "string", description: "comma- or newline-separated tech list" },
+    useCases: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string" },
+          actor: { type: "string" },
+          acceptance: { type: "string" },
+        },
+        required: ["name", "actor", "acceptance"],
+      },
+    },
+    scale: { type: "string" },
+    availabilitySlo: { type: "string" },
+    errorBudget: { type: "string" },
+    retention: { type: "string" },
+    latencyPaths: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: { path: { type: "string" }, p99: { type: "string" } },
+        required: ["path", "p99"],
+      },
+    },
+    consistency: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: { domain: { type: "string" }, level: { type: "string", enum: ["strong", "eventual"] } },
+        required: ["domain", "level"],
+      },
+    },
+    compliance: { type: "array", items: { type: "string" } },
+    entities: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string" },
+          accessPatterns: { type: "string", description: "one pattern per line" },
+          readWriteRatio: { type: "string" },
+          pii: { type: "boolean" },
+        },
+        required: ["name", "accessPatterns", "readWriteRatio", "pii"],
+      },
+    },
+    integrations: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: { name: { type: "string" }, slaMs: { type: "string" }, onFailure: { type: "string" } },
+        required: ["name", "slaMs", "onFailure"],
+      },
+    },
+    coverageTarget: { type: "string" },
+    loadTestTarget: { type: "string" },
+    qualityGates: { type: "string", description: "one gate per line" },
+  },
+  required: [
+    "name", "summary", "deployTarget", "stack", "useCases", "scale", "availabilitySlo",
+    "errorBudget", "retention", "latencyPaths", "consistency", "compliance", "entities",
+    "integrations", "coverageTarget", "loadTestTarget", "qualityGates",
+  ],
+} as const
+
+export async function extractSpecForm(content: string): Promise<SpecForm> {
+  const res = await trackedCreate({
+    model: MODEL,
+    max_tokens: 4096,
+    thinking: { type: "adaptive" },
+    system: systemBlocks(
+      "You convert a free-form project brief / architecture document into the structured fields of an intake form. Extract only what the document states; leave a field as an empty string (or empty array) when it is not stated — NEVER invent NFR numbers, SLOs, latency budgets or scale figures. `stack` is comma/newline-separated. Each entity's `accessPatterns` and the `qualityGates` are newline-separated. `consistency.level` is 'strong' or 'eventual'. Set `pii: true` only when personal data is clearly involved."
+    ),
+    messages: [{ role: "user", content: `Document:\n\n${content.slice(0, 40000)}` }],
+    output_config: { format: { type: "json_schema", schema: SPEC_FORM_SCHEMA } },
+  })
+  const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("")
+  return JSON.parse(text) as SpecForm
 }
