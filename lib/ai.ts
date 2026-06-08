@@ -474,7 +474,7 @@ const SPEC_CRITIQUE_SCHEMA = {
   additionalProperties: false,
   properties: {
     readiness: { type: "string", enum: ["READY", "BLOCK"] },
-    spec_quality_score: { type: "integer", minimum: 0, maximum: 100 },
+    spec_quality_score: { type: "integer", description: "0-100" },
     summary: { type: "string" },
     findings: {
       type: "array",
