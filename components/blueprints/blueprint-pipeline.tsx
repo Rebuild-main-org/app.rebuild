@@ -13,6 +13,7 @@ import {
   Rocket,
   ShieldCheck,
   Trash2,
+  Wand2,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -25,6 +26,7 @@ import {
   type Blueprint,
   type GateKey,
   type SpecForm,
+  type SpecRevision,
 } from "@/lib/blueprint-types"
 import { SpecWizard } from "@/components/blueprints/spec-wizard"
 import { Button } from "@/components/ui/button"
@@ -78,6 +80,8 @@ export function BlueprintPipeline({
   const [acceptanceYaml, setAcceptanceYaml] = useState(initial.acceptanceYaml)
   const [validation, setValidation] = useState<{ ok: boolean; missing: string[]; present: string[] } | null>(null)
   const [intakeMode, setIntakeMode] = useState<"wizard" | "yaml">(initial.specYaml.trim() ? "yaml" : "wizard")
+  const [proposal, setProposal] = useState<SpecRevision | null>(null)
+  const [proposedSpec, setProposedSpec] = useState("")
   const [wizardForm, setWizardForm] = useState<SpecForm | undefined>(undefined)
   const [wizardKey, setWizardKey] = useState(0)
   const mdInputRef = useRef<HTMLInputElement>(null)
@@ -171,6 +175,29 @@ export function BlueprintPipeline({
     } finally {
       setBusy(null)
     }
+  }
+
+  // The critique proposes a revised spec; the user edits it then approves.
+  async function runPropose() {
+    setBusy("propose")
+    try {
+      const { revision } = await api("/propose", { method: "POST" })
+      setProposal(revision as SpecRevision)
+      setProposedSpec((revision as SpecRevision).revised_spec)
+      toast.success("Corrections proposées — relis, modifie, puis approuve")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function approveProposal() {
+    setSpec(proposedSpec)
+    setIntakeMode("yaml")
+    setProposal(null)
+    // Replacing the spec re-arms the validate/critique gates (server-side).
+    await savePatch({ specYaml: proposedSpec }, "Spec corrigée approuvée")
   }
 
   async function runPlan() {
@@ -477,6 +504,49 @@ export function BlueprintPipeline({
               className="text-sm"
             />
           </div>
+
+          {/* AI proposes a corrected spec → the user edits & approves */}
+          {bp.critique && !readOnly && (
+            <div className="space-y-2">
+              <Separator />
+              <Button onClick={runPropose} disabled={busy === "propose"} variant="outline" className="gap-2">
+                {busy === "propose" ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
+                Proposer des corrections (IA)
+              </Button>
+
+              {proposal && (
+                <div className="space-y-2 rounded-md border p-3">
+                  <p className="text-sm font-medium">Changements proposés ({proposal.changes.length})</p>
+                  {proposal.changes.length > 0 && (
+                    <ul className="ml-4 list-disc space-y-0.5 text-sm">
+                      {proposal.changes.map((c, i) => (
+                        <li key={i}>
+                          <span className="font-medium">{c.title}</span>{" "}
+                          {c.spec_path && <code className="text-muted-foreground text-xs">{c.spec_path}</code>} — {c.detail}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {proposal.notes && <p className="text-muted-foreground text-xs">{proposal.notes}</p>}
+                  <label className="text-sm font-medium">Spec proposée (modifiable avant d&apos;approuver)</label>
+                  <Textarea
+                    value={proposedSpec}
+                    onChange={(e) => setProposedSpec(e.target.value)}
+                    rows={14}
+                    className="font-mono text-xs"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" onClick={approveProposal} disabled={busy === "save"} className="gap-1.5">
+                      <Check className="size-4" /> Approuver & remplacer la spec
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setProposal(null)}>
+                      Annuler
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

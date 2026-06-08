@@ -7,7 +7,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { currentApiKey, recordAiUsage } from "./ai-usage"
 import { getAiModel } from "./settings"
 import { loadSystemPrompt } from "./doc-loader"
-import type { SpecForm } from "./blueprint-types"
+import type { SpecForm, SpecRevision } from "./blueprint-types"
 
 // Compile-time default. The *effective* model is resolved per call in
 // trackedCreate() from the runtime setting a SUPER_ADMIN controls (see
@@ -725,6 +725,69 @@ const SPEC_FORM_SCHEMA = {
     "integrations", "coverageTarget", "loadTestTarget", "qualityGates",
   ],
 } as const
+
+// --- Spec revision proposal (critique proposes edits; human approves) -------
+// Given a spec + its critique + the human's answers, produce a REVISED full
+// project.spec.yaml that resolves the auto-fixable findings and applies the
+// answers. Gaps with no known value get a clearly-marked assumption (inline
+// `# assumption:` comment) — never a silently invented hard NFR number.
+const SPEC_REVISION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    revised_spec: { type: "string", description: "the full revised project.spec.yaml" },
+    changes: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          title: { type: "string" },
+          detail: { type: "string" },
+          spec_path: { type: "string" },
+        },
+        required: ["title", "detail", "spec_path"],
+      },
+    },
+    notes: { type: "string" },
+  },
+  required: ["revised_spec", "changes", "notes"],
+} as const
+
+export async function proposeSpecRevision(input: {
+  spec: string
+  critique?: unknown
+  answers?: string
+  outputLanguage?: string
+}): Promise<SpecRevision> {
+  const lang = input.outputLanguage ?? "fr"
+  const res = await trackedCreate({
+    model: MODEL,
+    max_tokens: 12000,
+    thinking: { type: "adaptive" },
+    system: systemBlocks(
+      "You are a staff software architect. Given a project.spec.yaml, its critique findings and the human's answers, produce a REVISED full project.spec.yaml that resolves the auto-fixable findings and applies the answers. " +
+        "Where a value is genuinely unknown, propose a sensible DEFAULT and mark it inline as `# assumption: …` — NEVER silently invent hard NFR numbers (scale, latency, SLO) without flagging them as assumptions. Keep the YAML valid and keep everything the human already provided unless a finding requires changing it. " +
+        `List each change you made (title, detail, spec_path). Write change titles/details and notes in ${lang}; keep YAML keys/values in their original language. Respond with JSON only.`
+    ),
+    messages: [
+      {
+        role: "user",
+        content:
+          `Current spec:\n\`\`\`yaml\n${input.spec.slice(0, 30000)}\n\`\`\`\n\n` +
+          `Critique (JSON):\n${JSON.stringify(input.critique ?? {}).slice(0, 12000)}\n\n` +
+          `Human answers:\n${input.answers || "(none)"}`,
+      },
+    ],
+    output_config: { format: { type: "json_schema", schema: SPEC_REVISION_SCHEMA } },
+  })
+  const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim()
+  try {
+    return JSON.parse(text) as SpecRevision
+  } catch {
+    throw new Error("Réponse IA tronquée — réessaie.")
+  }
+}
 
 export async function extractSpecForm(content: string): Promise<SpecForm> {
   const res = await trackedCreate({

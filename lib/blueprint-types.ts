@@ -132,6 +132,11 @@ export const EMPTY_SPEC_FORM: SpecForm = {
   qualityGates: "",
 }
 
+// AI-proposed spec revision (the critique proposes changes; the human edits &
+// approves). `revised_spec` is a full project.spec.yaml the user can modify.
+export interface SpecChange { title: string; detail: string; spec_path: string }
+export interface SpecRevision { revised_spec: string; changes: SpecChange[]; notes: string }
+
 export function prereqsGate(prereqs: Record<string, boolean>): boolean {
   return PREREQ_ITEMS.every((p) => prereqs[p.key] === true)
 }
