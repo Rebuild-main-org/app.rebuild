@@ -16,6 +16,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!bp) return Response.json({ error: "Not found" }, { status: 404 })
 
   const validation = validateSpec(bp.specYaml)
-  await updateBlueprint(id, { gates: { ...bp.gates, validate: validation.ok } })
-  return Response.json(validation)
+  const updated = await updateBlueprint(id, { gates: { ...bp.gates, validate: validation.ok } })
+  if (!updated) {
+    return Response.json({ error: "La gate n'a pas pu être enregistrée." }, { status: 500 })
+  }
+  // Return the persisted blueprint so the client reflects DB truth exactly.
+  return Response.json({ ...validation, blueprint: updated })
 }

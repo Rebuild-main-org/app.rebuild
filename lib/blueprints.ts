@@ -12,14 +12,36 @@ export * from "./blueprint-types"
 const SEL_BLUEPRINT =
   "id,title,status,specYaml:spec_yaml,answers,critique,plan,feasibility,designDoc:design_doc,acceptanceYaml:acceptance_yaml,prereqs,gates,documents,figmaUrl:figma_url,workspaceId:workspace_id,createdBy:created_by,createdAt:created_at,updatedAt:updated_at"
 
+// jsonb usually arrives parsed; if a driver/column quirk returns it as a string,
+// coerce it so callers (and `bp.gates.validate`) never operate on a string.
+function asObj(v: unknown): Record<string, unknown> {
+  if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>
+  if (typeof v === "string") { try { const p = JSON.parse(v); return p && typeof p === "object" && !Array.isArray(p) ? p : {} } catch { return {} } }
+  return {}
+}
+function asArr(v: unknown): unknown[] {
+  if (Array.isArray(v)) return v
+  if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : [] } catch { return [] } }
+  return []
+}
+function normalize(row: unknown): Blueprint {
+  const r = row as Record<string, unknown>
+  return {
+    ...(r as unknown as Blueprint),
+    gates: asObj(r.gates) as Blueprint["gates"],
+    prereqs: asObj(r.prereqs) as Record<string, boolean>,
+    documents: asArr(r.documents) as Blueprint["documents"],
+  }
+}
+
 export async function listBlueprints(): Promise<Blueprint[]> {
   const { data } = await sb().from("blueprints").select(SEL_BLUEPRINT).order("created_at", { ascending: false })
-  return (data ?? []) as Blueprint[]
+  return (data ?? []).map(normalize)
 }
 
 export async function getBlueprint(id: string): Promise<Blueprint | null> {
   const { data } = await sb().from("blueprints").select(SEL_BLUEPRINT).eq("id", id).maybeSingle()
-  return (data as Blueprint | null) ?? null
+  return data ? normalize(data) : null
 }
 
 export async function createBlueprint(input: {
@@ -56,7 +78,7 @@ export async function updateBlueprint(
     .select(SEL_BLUEPRINT)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  return (data as Blueprint | null) ?? null
+  return data ? normalize(data) : null
 }
 
 export async function deleteBlueprint(id: string): Promise<void> {

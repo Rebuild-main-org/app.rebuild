@@ -136,8 +136,9 @@ export function BlueprintPipeline({
       // persist any spec edit first
       if (spec !== bp.specYaml) await api("", { method: "PATCH", body: JSON.stringify({ specYaml: spec }) })
       const v = await api("/validate", { method: "POST" })
-      setValidation(v)
-      setBp((b) => ({ ...b, specYaml: spec, gates: { ...b.gates, validate: v.ok } }))
+      setValidation({ ok: v.ok, missing: v.missing, present: v.present })
+      if (v.blueprint) setBp(v.blueprint) // reflect the persisted gate exactly
+      else setBp((b) => ({ ...b, specYaml: spec, gates: { ...b.gates, validate: v.ok } }))
       toast[v.ok ? "success" : "error"](v.ok ? "Spec complète" : `${v.missing.length} section(s) manquante(s)`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Échec")
