@@ -12,6 +12,7 @@ import {
   Play,
   Rocket,
   ShieldCheck,
+  Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -61,9 +62,11 @@ function GateBadge({ on }: { on: boolean | undefined }) {
 export function BlueprintPipeline({
   initial,
   canCreateWorkspace,
+  canDelete,
 }: {
   initial: Blueprint
   canCreateWorkspace: boolean
+  canDelete: boolean
 }) {
   const router = useRouter()
   const [bp, setBp] = useState<Blueprint>(initial)
@@ -210,6 +213,19 @@ export function BlueprintPipeline({
     }
   }
 
+  async function deleteBlueprint() {
+    if (!confirm(`Supprimer définitivement le blueprint « ${bp.title} » ?`)) return
+    setBusy("delete")
+    try {
+      await api("", { method: "DELETE" })
+      toast.success("Blueprint supprimé")
+      router.push("/blueprints")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Suppression échouée")
+      setBusy(null)
+    }
+  }
+
   async function convert() {
     if (!confirm("Créer le workspace depuis ce Blueprint approuvé ?")) return
     setBusy("convert")
@@ -233,7 +249,21 @@ export function BlueprintPipeline({
       <div>
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold">{bp.title}</h1>
-          <Badge variant="outline">{bp.status}</Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">{bp.status}</Badge>
+            {canDelete && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={deleteBlueprint}
+                disabled={busy === "delete"}
+                className="text-muted-foreground hover:text-destructive gap-1.5"
+              >
+                {busy === "delete" ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                Supprimer
+              </Button>
+            )}
+          </div>
         </div>
         <p className="text-muted-foreground text-sm">
           Phase A — Conception · gates {greenCount}/{ALL_GATES.length}

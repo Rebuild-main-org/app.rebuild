@@ -54,9 +54,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   return Response.json(updated)
 }
 
-// DELETE /api/blueprints/:id
+// DELETE /api/blueprints/:id — SUPER_ADMIN only.
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await guard())) return Response.json({ error: "Forbidden" }, { status: 403 })
+  const user = await getSessionUser()
+  if (!user || user.role !== "SUPER_ADMIN") {
+    return Response.json({ error: "Forbidden — super admin only" }, { status: 403 })
+  }
   await deleteBlueprint((await params).id)
   return Response.json({ ok: true })
 }

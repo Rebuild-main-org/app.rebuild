@@ -20,5 +20,11 @@ export default async function BlueprintDetail({
   const bp = await getBlueprint(id)
   if (!bp) notFound()
 
-  return <BlueprintPipeline initial={bp} canCreateWorkspace={can(user, "workspace.create")} />
+  return (
+    <BlueprintPipeline
+      initial={bp}
+      canCreateWorkspace={can(user, "workspace.create")}
+      canDelete={user.role === "SUPER_ADMIN"}
+    />
+  )
 }
