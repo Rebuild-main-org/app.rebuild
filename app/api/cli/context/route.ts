@@ -4,6 +4,7 @@ import { isWorkspaceMember } from "@/lib/auth/guard"
 import { isAdmin } from "@/lib/auth"
 import { defaultOrg } from "@/lib/github"
 import { listRepoFiles, readRepoFile } from "@/lib/doc-loader"
+import { getCliModel } from "@/lib/settings"
 import type { Project, Ticket, Workspace } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -141,6 +142,8 @@ export async function GET(request: Request) {
     merged[key].length ? merged[key].join("\n\n---\n\n") : globals[key] ?? ""
 
   return Response.json({
+    // Claude model the CLI/agent engine should use (SUPER_ADMIN-controlled).
+    cliModel: await getCliModel(),
     user: { id: user.id, name: user.name, role: user.role },
     workspace: ws ? { id: ws.id, name: ws.name, githubRepo: normalizeRepo(ws.githubRepo) } : null,
     project: {

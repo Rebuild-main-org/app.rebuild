@@ -22,6 +22,7 @@ import {
   GitBranch,
   BookOpen,
   Briefcase,
+  ClipboardCheck,
   LayoutDashboard,
   LifeBuoy,
   Menu,
@@ -178,6 +179,7 @@ export function AppShell({
   const globalNav: NavItem[] = [
     { href: "/how-to-use", label: "How to use?", icon: BookOpen },
     ...(sec("dashboard") ? [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
+    ...(sec("blueprints") ? [{ href: "/blueprints", label: "Blueprints", icon: ClipboardCheck }] : []),
     ...(sec("workspaces") ? [{ href: "/workspaces", label: "Workspaces", icon: Boxes }] : []),
     ...(sec("crm") ? [{ href: "/crm", label: "CRM", icon: Briefcase }] : []),
     ...(sec("support") ? [{ href: "/support", label: "Support", icon: LifeBuoy }] : []),

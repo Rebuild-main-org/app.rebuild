@@ -4,6 +4,7 @@
 import "server-only"
 import { randomUUID } from "crypto"
 import { nextTicketNumberFromShortIds } from "./ticket-number"
+import type { ScaffoldPlan } from "./ai"
 
 import { SEL, sb } from "./data"
 import { emit } from "./events"
@@ -577,6 +578,100 @@ export async function createBranch(workspaceId: string, name: string, fromHash =
 
 // Keep StoryPoints referenced for type clarity in callers importing from here.
 export type { StoryPoints }
+
+// Appended to every scaffolded ticket so "done" means the same thing everywhere.
+export const DEFINITION_OF_DONE = `## Definition of Done
+- [ ] Acceptance criteria above met
+- [ ] Code typechecks, lints, and builds
+- [ ] Tests added/updated and passing
+- [ ] Reviewed (AI review + a teammate)
+- [ ] Merged via PR with CI green`
+
+export interface ApplyPlanResult {
+  projects: number
+  tickets: number
+  subtasks: number
+  links: number
+  breakdown: { project: string; tickets: number }[]
+}
+
+// Create a workspace's projects + To-Do backlog (with sub-tasks and dependency
+// links) from a frozen ScaffoldPlan. Shared by the scaffold route and the
+// blueprint → workspace conversion so "apply a plan" means one thing.
+export async function applyScaffoldPlan(
+  workspaceId: string,
+  plan: ScaffoldPlan
+): Promise<ApplyPlanResult> {
+  const POINTS = new Set([1, 2, 3, 5, 8, 13])
+  const LINK_TYPES = new Set(["BLOCKS", "RELATES", "DUPLICATES"])
+  const refToId = new Map<string, string>()
+  const breakdown: { project: string; tickets: number }[] = []
+  let totalTickets = 0
+  let totalSubtasks = 0
+  let totalLinks = 0
+
+  // Pass 1 — projects + parent tickets (+ sub-tasks), mapping each `ref` to its id.
+  for (const p of plan.projects) {
+    const project = await createProject(workspaceId, {
+      name: p.name,
+      shortCode: p.shortCode || p.name.slice(0, 4).toUpperCase(),
+      description: p.description,
+      status: "ACTIVE",
+    })
+    let n = 0
+    for (const t of p.tickets) {
+      const pts = t.points && POINTS.has(t.points) ? (t.points as StoryPoints) : undefined
+      const ticket = await createTicket(project.id, {
+        title: t.title,
+        description: `${t.description}\n\n${DEFINITION_OF_DONE}`,
+        type: t.type,
+        priority: t.priority,
+        status: "TODO",
+        points: pts,
+      })
+      if (t.ref) refToId.set(t.ref, ticket.id)
+      n++
+      for (const st of t.subtasks ?? []) {
+        if (!st?.trim()) continue
+        try {
+          await createTicket(project.id, {
+            title: st.trim(),
+            description: "",
+            type: "SUBTASK",
+            priority: t.priority,
+            status: "TODO",
+            parentId: ticket.id,
+          })
+          totalSubtasks++
+        } catch {
+          /* skip invalid sub-task */
+        }
+      }
+    }
+    breakdown.push({ project: project.name, tickets: n })
+    totalTickets += n
+  }
+
+  // Pass 2 — links, once every ticket id is known (may cross projects).
+  for (const p of plan.projects) {
+    for (const t of p.tickets) {
+      const fromId = refToId.get(t.ref)
+      if (!fromId) continue
+      for (const link of t.links ?? []) {
+        const toId = refToId.get(link.to)
+        if (!toId || toId === fromId || !LINK_TYPES.has(link.type)) continue
+        try {
+          await addLink(fromId, toId, link.type as "BLOCKS" | "RELATES" | "DUPLICATES")
+          totalLinks++
+        } catch {
+          /* skip duplicate/invalid link */
+        }
+      }
+    }
+  }
+
+  return { projects: breakdown.length, tickets: totalTickets, subtasks: totalSubtasks, links: totalLinks, breakdown }
+}
 
 
 // --- Time tracking -----------------------------------------------------------

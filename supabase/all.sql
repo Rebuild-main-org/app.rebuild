@@ -1242,3 +1242,27 @@ create table if not exists app_settings (
   updated_at timestamptz not null default now()
 );
 alter table app_settings enable row level security;
+
+-- ── Phase A blueprints (Conception → approved Blueprint → workspace) ────────
+create table if not exists blueprints (
+  id              text primary key,
+  title           text not null,
+  status          text not null default 'DRAFT',
+  spec_yaml       text not null default '',
+  answers         text not null default '',
+  critique        jsonb,
+  plan            jsonb,
+  feasibility     text not null default '',
+  design_doc      text not null default '',
+  acceptance_yaml text not null default '',
+  prereqs         jsonb not null default '{}'::jsonb,
+  gates           jsonb not null default '{}'::jsonb,
+  documents       jsonb not null default '[]'::jsonb,
+  figma_url       text not null default '',
+  workspace_id    text,
+  created_by      text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+create index if not exists blueprints_status_idx on blueprints(status);
+alter table blueprints enable row level security;

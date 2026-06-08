@@ -1,11 +1,11 @@
-// App-wide settings stored in `app_settings` (key/value). Currently: the active
-// AI model, which a SUPER_ADMIN can change for everyone from the admin panel.
-// Read paths are cached briefly so they don't add a query to every AI call.
+// App-wide settings stored in `app_settings` (key/value). A SUPER_ADMIN sets
+// them for everyone from the admin panel. Two model settings:
+//   - `ai_model`  : the server AI (review, triage, scaffold, copilot…)
+//   - `cli_model` : the rebuild216 CLI / agent engine
+// Read paths are cached briefly so they don't add a query to every call.
 
 import "server-only"
 import { sb } from "./data"
-
-const AI_MODEL_KEY = "ai_model"
 
 // The compile-time default (env override, else Opus 4.8). Used when no DB value
 // is set or the settings table isn't reachable.
@@ -24,35 +24,50 @@ export function isKnownModel(model: string): boolean {
   return AI_MODELS.some((m) => m.id === model)
 }
 
-let cache: { value: string; at: number } | null = null
-const TTL_MS = 60_000
+// --- generic key/value with a short per-key cache --------------------------
 
-// The active AI model for everyone (DB setting → env → Opus 4.8). Cached 60s.
-export async function getAiModel(): Promise<string> {
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.value
+const TTL_MS = 60_000
+const cache = new Map<string, { value: string; at: number }>()
+
+async function getSetting(key: string, fallback: string): Promise<string> {
+  const hit = cache.get(key)
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.value
   try {
-    const { data } = await sb()
-      .from("app_settings")
-      .select("value")
-      .eq("key", AI_MODEL_KEY)
-      .maybeSingle()
-    const value = (data?.value as string) || DEFAULT_AI_MODEL
-    cache = { value, at: Date.now() }
+    const { data } = await sb().from("app_settings").select("value").eq("key", key).maybeSingle()
+    const value = (data?.value as string) || fallback
+    cache.set(key, { value, at: Date.now() })
     return value
   } catch {
-    // settings table not migrated yet → fall back, don't break AI calls
-    return DEFAULT_AI_MODEL
+    // settings table not migrated yet → fall back, don't break callers
+    return fallback
   }
 }
 
-// Persist the active model (SUPER_ADMIN only — enforced in the route). Updates
-// the cache so the change takes effect immediately on this instance.
-export async function setAiModel(model: string, updatedBy?: string): Promise<void> {
-  if (!isKnownModel(model)) throw new Error("Unknown model")
+async function setSetting(key: string, value: string, updatedBy?: string): Promise<void> {
   const { error } = await sb().from("app_settings").upsert(
-    { key: AI_MODEL_KEY, value: model, updated_by: updatedBy ?? null, updated_at: new Date().toISOString() },
+    { key, value, updated_by: updatedBy ?? null, updated_at: new Date().toISOString() },
     { onConflict: "key" }
   )
   if (error) throw new Error(error.message)
-  cache = { value: model, at: Date.now() }
+  cache.set(key, { value, at: Date.now() })
+}
+
+// --- AI model (server) ------------------------------------------------------
+
+export async function getAiModel(): Promise<string> {
+  return getSetting("ai_model", DEFAULT_AI_MODEL)
+}
+export async function setAiModel(model: string, updatedBy?: string): Promise<void> {
+  if (!isKnownModel(model)) throw new Error("Unknown model")
+  await setSetting("ai_model", model, updatedBy)
+}
+
+// --- CLI model (rebuild216 / agent engine) ----------------------------------
+
+export async function getCliModel(): Promise<string> {
+  return getSetting("cli_model", DEFAULT_AI_MODEL)
+}
+export async function setCliModel(model: string, updatedBy?: string): Promise<void> {
+  if (!isKnownModel(model)) throw new Error("Unknown model")
+  await setSetting("cli_model", model, updatedBy)
 }

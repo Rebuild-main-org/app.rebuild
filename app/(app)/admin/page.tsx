@@ -6,7 +6,7 @@ import { can, isAdmin } from "@/lib/auth"
 import { SEL, sb } from "@/lib/data"
 import { docTotal, formatMoney, summarize } from "@/lib/finance"
 import { aiUsageSummary } from "@/lib/ai-usage"
-import { AI_MODELS, DEFAULT_AI_MODEL, getAiModel } from "@/lib/settings"
+import { AI_MODELS, DEFAULT_AI_MODEL, getAiModel, getCliModel } from "@/lib/settings"
 import type { FinanceDoc, Transaction } from "@/lib/types"
 import { NewFinanceDoc } from "@/components/admin/new-finance-doc"
 import { NewTransaction } from "@/components/admin/new-transaction"
@@ -46,6 +46,7 @@ export default async function AdminPage() {
   const canDeleteFinance = can(user, "billing.delete")
   const isSuperAdmin = user.role === "SUPER_ADMIN"
   const aiModel = isSuperAdmin ? await getAiModel() : null
+  const cliModel = isSuperAdmin ? await getCliModel() : null
   const s = summarize(txns, docs)
 
   return (
@@ -99,7 +100,24 @@ export default async function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <AiModelSetting current={aiModel} models={AI_MODELS} defaultModel={DEFAULT_AI_MODEL} />
+            <AiModelSetting field="aiModel" current={aiModel} models={AI_MODELS} defaultModel={DEFAULT_AI_MODEL} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* AI model — CLI/agent engine (super admin only) */}
+      {isSuperAdmin && cliModel && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Modèle IA (CLI)</CardTitle>
+            <CardDescription>
+              Le modèle Claude utilisé par toute l&apos;IA CLI (moteur de l&apos;agent
+              rebuild216 : livraison autonome, chat). Le changement s&apos;applique au prochain
+              lancement, pour <strong>tous</strong> les utilisateurs.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AiModelSetting field="cliModel" current={cliModel} models={AI_MODELS} defaultModel={DEFAULT_AI_MODEL} />
           </CardContent>
         </Card>
       )}

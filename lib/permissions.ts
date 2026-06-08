@@ -6,6 +6,7 @@ import { ALL_ROLES, type Role } from "@/lib/types"
 // Sections whose access the super-admin can grant per role (matches the nav).
 export const SECTIONS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard" },
+  { key: "blueprints", label: "Blueprints", href: "/blueprints" },
   { key: "workspaces", label: "Workspaces", href: "/workspaces" },
   { key: "crm", label: "CRM", href: "/crm" },
   { key: "support", label: "Support", href: "/support" },
@@ -19,6 +20,7 @@ export const SECTION_KEYS = SECTIONS.map((s) => s.key) as SectionKey[]
 // Defaults mirror the previous static RBAC. SUPER_ADMIN always has everything.
 const DEFAULTS: Record<SectionKey, Role[]> = {
   dashboard: [...ALL_ROLES],
+  blueprints: ["ADMIN", "LEAD", "PM", "SALES"],
   workspaces: [...ALL_ROLES],
   crm: ["ADMIN", "LEAD", "PM", "SALES"],
   support: [...ALL_ROLES],

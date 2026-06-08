@@ -28,7 +28,9 @@ export type Action =
   | "notify.broadcast"
 
 const MATRIX: Record<Action, Role[]> = {
-  "workspace.create": ["ADMIN"],
+  // Creating a workspace is reserved to the SUPER_ADMIN (it only happens from an
+  // approved Blueprint). Empty list ⇒ only SUPER_ADMIN passes via can()'s superuser short-circuit.
+  "workspace.create": [],
   "workspace.delete": ["ADMIN"],
   "workspace.edit": ["ADMIN", "LEAD"],
   "project.create": ["ADMIN", "LEAD", "PM"],

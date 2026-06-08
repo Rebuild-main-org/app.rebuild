@@ -13,13 +13,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-// SUPER_ADMIN control: pick the Claude model used by the whole platform's
-// server AI (review, triage, scaffold, copilot…).
+// SUPER_ADMIN control: pick the Claude model used platform-wide. `field`
+// selects which setting to write: "aiModel" (server AI) or "cliModel" (CLI/agent).
 export function AiModelSetting({
+  field = "aiModel",
   current,
   models,
   defaultModel,
 }: {
+  field?: "aiModel" | "cliModel"
   current: string
   models: { id: string; label: string }[]
   defaultModel: string
@@ -33,7 +35,7 @@ export function AiModelSetting({
     const res = await fetch("/api/admin/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ aiModel: model }),
+      body: JSON.stringify({ [field]: model }),
     })
     setBusy(false)
     const data = await res.json().catch(() => ({}))

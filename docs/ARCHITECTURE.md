@@ -219,7 +219,8 @@ ADMIN ou SUPER_ADMIN.
 
 | Action | Rôles autorisés (hors SUPER_ADMIN qui a tout) |
 |---|---|
-| `workspace.create` / `workspace.delete` | ADMIN |
+| `workspace.create` | **SUPER_ADMIN uniquement** (création depuis un Blueprint approuvé) |
+| `workspace.delete` | ADMIN |
 | `workspace.edit` | ADMIN, LEAD |
 | `project.create` / `project.update` / `project.delete` | ADMIN, LEAD, PM |
 | `ticket.delete` | ADMIN, LEAD, PM |
@@ -347,6 +348,13 @@ rebuild216 key <sk-...>          # clé Anthropic centrale (sinon `claude login`
 labels, assignee, parent/links, comment, time), `update_ticket_status`,
 `add_comment`, `capture_screenshots`, `upload_screenshot`.
 
+### Modèle de l'agent
+Le modèle Claude du moteur CLI (livraison autonome + chat) est un réglage
+plateforme **contrôlé par le SUPER_ADMIN** depuis `/admin` (« Modèle IA (CLI) »,
+`app_settings` clé `cli_model`, distinct du modèle serveur `ai_model`). Le serveur
+le renvoie dans `/api/cli/context` (`cliModel`) ; `rebuild216` le passe en
+`options.model` à l'Agent SDK. Sans réglage → défaut Claude Code.
+
 ### Jetons — sessions **no-expire**
 Deux Bearer acceptés par `userFromBearer` (`lib/cli-auth.ts`) :
 1. **CLI token longue durée** (préfixe `rbld_`) — créé par `/api/cli/login` et
@@ -362,6 +370,29 @@ authentifié.
 ---
 
 ## 9. Workflows métier
+
+### 9.0 Phase A — Conception (avant le workspace) → Blueprint approuvé
+Un **Blueprint** (`blueprints`, `lib/blueprints.ts`) traverse 8 étapes, chacune
+avec une **gate** ; un workspace ne peut être créé que depuis un Blueprint
+**APPROVED** (toutes les gates vertes). Page : `/blueprints/[id]`.
+1. **Intake** — `project.spec.yaml` via **assistant guidé** (8 sous-étapes :
+   Projet · Cas d'usage · NFR · Données & accès · Intégrations & stack · Gates de
+   qualité · Documents [uploads → bucket Supabase + lien Figma] · Récapitulatif)
+   qui **génère la YAML en direct** (copier/télécharger) avec listes répétables et
+   gate de complétude, OU saisie YAML brute.
+2. **Validation de spec** — gate déterministe (`validateSpec`) : NFR, patterns
+   d'accès, modes de défaillance… présents → `gates.validate`.
+3. **Critique de spec** — `critiqueSpec()` (IA) attaque la spec, boucle
+   questions/réponses (`answers`) → gate `readiness === "READY"`.
+4. **Faisabilité & sizing**, 5. **Conception de solution** (SDD/ADRs/openapi/DB),
+   6. **Budgets & acceptance**, 7. **Pré-requis & provisioning** — gates
+   **humaines** : capture d'artefact (textarea / checklist) + validation manuelle.
+8. **Plan & approbation** — `planFromArchitecture` en **preview** (plan figé,
+   rien créé) → gate `plan`.
+**Approbation** (`/approve`) exige toutes les gates ; **conversion**
+(`/convert`, requiert `workspace.create`) crée le workspace et applique le plan
+figé via `applyScaffoldPlan` → statut `CONVERTED`. La suite est la Phase B
+(scaffold/livraison/PR/CI ci-dessous).
 
 ### 9.1 Cycle de vie d'un ticket
 `BACKLOG → TODO → IN_PROGRESS → IN_REVIEW → DONE`. La transition vers `DONE`
@@ -429,6 +460,7 @@ notifications, présence, i18n, applicateur de préférences).
 
 | Route | Accès | Données / comportement |
 |---|---|---|
+| `/blueprints` · `/blueprints/[id]` | section `blueprints` (ADMIN/LEAD/PM/SALES) | **Phase A — Conception.** Pipeline en 8 étapes à gates produisant un Blueprint approuvé ; la **création de workspace** ne se fait que depuis un Blueprint approuvé (voir §9.0). |
 | `/dashboard` | section `dashboard` | `myTickets`, `workspacesForUser`, projets + `projectProgress` ; activité Git live (`ghUserCommitsSince`, `ghUserOpenPRs`) ; panneau **REBUILD — progression** (clients, projets par niveau, avancement moyen, stack technique) + indicateurs sprint (complétés, points, assignations actives). |
 | `/workspaces` | section `workspaces` | cartes des espaces accessibles : compteurs projets / membres / tickets. |
 | `/crm` | `canAccessSection(crm)` | leads + pipeline ; liste des non-CLIENT pour l'étape de conversion. |
@@ -440,7 +472,7 @@ notifications, présence, i18n, applicateur de préférences).
 | `/how-to-use` | tous | mode d'emploi de la plateforme. |
 | `/profile` | tous | identité, avatar, **Connect with Claude** (clé Anthropic perso), MFA, export RGPD. |
 | `/settings` | tous | préférences : thème, densité, langue, accent, disponibilité, skills/tags, DND… |
-| `/admin` | `admin.panel` | utilisateurs & rôles, permissions de sections, **Modèle IA plateforme** (SUPER_ADMIN), **Devis & factures** (créer / changer le statut / **supprimer** ADMIN+SUPER_ADMIN), charges & revenus, agents & agent-docs, usage IA, diffusion d'avis (SUPER_ADMIN). |
+| `/admin` | `admin.panel` | utilisateurs & rôles, permissions de sections, **Modèle IA plateforme** + **Modèle IA CLI** (SUPER_ADMIN), **Devis & factures** (créer / changer le statut / **supprimer** ADMIN+SUPER_ADMIN), charges & revenus, agents & agent-docs, usage IA, diffusion d'avis (SUPER_ADMIN). |
 | `/admin/audit` | `admin.panel` | 1000 dernières lignes d'`audit_logs` (résolution des noms). |
 
 ### 10.3 Espace de travail `/workspace/[id]`
@@ -529,6 +561,19 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 | `test-cases/[id]/runs` | GET, POST | — | exécutions de test |
 | `sprints/[id]/snapshot` | GET, POST | — | snapshot burndown |
 
+### 11.3b Blueprints (Phase A — section `blueprints`)
+| Route | Méthodes | Auth | Comportement |
+|---|---|---|---|
+| `blueprints` | GET, POST | section `blueprints` | liste / créer (Intake) |
+| `blueprints/[id]` | GET, PATCH, DELETE | section `blueprints` | lire / éditer artefacts (éditer la spec invalide validate+critique) / supprimer |
+| `blueprints/[id]/validate` | POST | section `blueprints` | gate déterministe `validateSpec` |
+| `blueprints/[id]/critique` | POST | section `blueprints` | `critiqueSpec` (IA, via `withAi`) → gate READY |
+| `blueprints/[id]/plan` | POST | section `blueprints` | `planFromArchitecture` preview (plan figé) |
+| `blueprints/[id]/gate` | POST | section `blueprints` | toggle d'une gate humaine (feasibility/design/budgets/prereqs) |
+| `blueprints/[id]/approve` | POST | section `blueprints` | passe APPROVED si toutes les gates vertes |
+| `blueprints/[id]/documents` | POST, DELETE | section `blueprints` | upload (→ bucket, sinon base64) / retrait d'un fichier attaché |
+| `blueprints/[id]/convert` | POST | **`workspace.create`** (SUPER_ADMIN) | crée le workspace + applique le plan → CONVERTED |
+
 ### 11.4 Workspaces
 | Route | Méthodes | Auth | Comportement |
 |---|---|---|---|
@@ -588,7 +633,7 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 | Route | Méthodes | Auth | |
 |---|---|---|---|
 | `admin/users`, `…/[id]` | GET,POST / PATCH,DELETE | `isAdmin` | gestion utilisateurs/rôles |
-| `admin/settings` | GET, PUT | GET=`admin.panel`, **PUT=SUPER_ADMIN** | lire/changer le modèle IA global |
+| `admin/settings` | GET, PUT | GET=`admin.panel`, **PUT=SUPER_ADMIN** | lire/changer les modèles IA globaux (`aiModel` serveur + `cliModel` CLI) |
 | `admin/permissions` | GET, PUT | session (admin via page) | matrice de sections |
 | `admin/agents`, `…/[id]`, `…/[id]/files` | GET,POST / GET,PATCH,DELETE / PUT,DELETE | `isAdmin` | agents IA & leurs fichiers |
 | `admin/agent-docs` | GET, PUT | `admin.panel` | docs d'agent |
@@ -641,7 +686,8 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 | `github.ts` | toute l'intégration GitHub (Octokit) |
 | `ai.ts` | features IA + `trackedCreate` (résout le modèle actif) + schémas JSON |
 | `ai-usage.ts` | gouvernance/coûts IA (ALS, budget, agrégats) |
-| `settings.ts` | réglages plateforme (`app_settings`) : modèle IA actif (`getAiModel`/`setAiModel`, `AI_MODELS`) |
+| `blueprints.ts` / `blueprint-types.ts` | Phase A : data access (service-role) + `validateSpec`, gates, conversion ; types/constantes client-safe |
+| `settings.ts` | réglages plateforme (`app_settings`) : modèle IA serveur (`getAiModel`/`setAiModel`) + modèle CLI (`getCliModel`/`setCliModel`), `AI_MODELS` |
 | `analytics.ts` / `dora.ts` | analytics (global/ingénieur/workspace) + DORA |
 | `reports.ts` | génération de rapports (markdown) |
 | `finance.ts` | totaux, TVA, formatage monnaie, `summarize` |
@@ -667,6 +713,7 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 (section_permissions), `ai-usage.sql`, `cli-sessions.sql`, **`cli-tokens.sql`**
 (tokens CLI non-expirants), `user-ai-keys.sql` (Connect with Claude),
 **`app-settings.sql`** (réglages plateforme : modèle IA),
+**`blueprints.sql`** (Phase A — Conception),
 `project-groups.sql`, `crm-fixes.sql`, `discord*.sql`, `agents*.sql`,
 `time-tracking.sql`, `qa-support.sql`, `custom-fields.sql`, `vercel.sql`,
 `super-admin.sql`, `admin-user.sql`.

@@ -458,6 +458,9 @@ function agentOptions(workDir, cfg, project, resume) {
   return {
     cwd: workDir,
     permissionMode: "bypassPermissions",
+    // Claude model for the agent engine, set platform-wide by a SUPER_ADMIN
+    // (server `cli_model`). Omitted → Claude Code's default.
+    ...(cfg.cliModel ? { model: cfg.cliModel } : {}),
     // Pass the API key to the Claude Code subprocess (env REPLACES the child
     // env, so spread process.env to keep PATH/HOME). Omitted → falls back to
     // the machine's `claude login`.
@@ -556,6 +559,11 @@ async function setupProject(project, cfg) {
   if (!ctx.workspace?.githubRepo) {
     console.error(c.red("This project's workspace has no GitHub repo set."))
     process.exit(1)
+  }
+  // CLI/agent model is a platform setting a SUPER_ADMIN controls (server-side).
+  if (ctx.cliModel) {
+    cfg.cliModel = ctx.cliModel
+    console.log(c.dim(`Model: ${ctx.cliModel}`))
   }
   const repo = ctx.workspace.githubRepo
   const todo = ctx.tickets.filter((t) => t.status !== "DONE")
