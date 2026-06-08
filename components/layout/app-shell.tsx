@@ -30,6 +30,9 @@ import {
   MessageSquare,
   Moon,
   Settings,
+  Shield,
+  ScrollText,
+  CircleUser,
   Sun,
   TerminalSquare,
   KanbanSquare,
@@ -191,16 +194,30 @@ export function AppShell({
     ...(sec("reports") ? [{ href: "/reports", label: "Reports", icon: FileBarChart }] : []),
   ]
 
-  const wsNav: NavItem[] = activeWs
+  // Account / admin shortcuts (also in the avatar menu) — surfaced in the sidebar.
+  const bottomNav: NavItem[] = [
+    ...(can(user, "admin.panel")
+      ? [
+          { href: "/admin", label: "Admin", icon: Shield },
+          { href: "/admin/audit", label: "Audit", icon: ScrollText },
+        ]
+      : []),
+    { href: "/settings", label: "Settings", icon: Settings },
+    { href: "/profile", label: "Profile", icon: CircleUser },
+  ]
+
+  // Show the workspace sub-nav whenever the URL is inside a workspace, even if
+  // that workspace isn't in the user's list (admins, freshly-created, stale list).
+  const wsNav: NavItem[] = activeWsId
     ? [
-        { href: `/workspace/${activeWs.id}/overview`, label: "Overview", icon: LayoutDashboard },
-        { href: `/workspace/${activeWs.id}/projects`, label: "Projects", icon: KanbanSquare },
-        { href: `/workspace/${activeWs.id}/ide`, label: "IDE", icon: TerminalSquare },
-        { href: `/workspace/${activeWs.id}/git`, label: "Git & CI/CD", icon: GitBranch },
-        { href: `/workspace/${activeWs.id}/chat`, label: "Team Chat", icon: MessageSquare },
-        { href: `/workspace/${activeWs.id}/documents`, label: "Documents", icon: FileText },
-        { href: `/workspace/${activeWs.id}/calendar`, label: "Calendar", icon: Calendar },
-        { href: `/workspace/${activeWs.id}/settings`, label: "Settings", icon: Settings },
+        { href: `/workspace/${activeWsId}/overview`, label: "Overview", icon: LayoutDashboard },
+        { href: `/workspace/${activeWsId}/projects`, label: "Projects", icon: KanbanSquare },
+        { href: `/workspace/${activeWsId}/ide`, label: "IDE", icon: TerminalSquare },
+        { href: `/workspace/${activeWsId}/git`, label: "Git & CI/CD", icon: GitBranch },
+        { href: `/workspace/${activeWsId}/chat`, label: "Team Chat", icon: MessageSquare },
+        { href: `/workspace/${activeWsId}/documents`, label: "Documents", icon: FileText },
+        { href: `/workspace/${activeWsId}/calendar`, label: "Calendar", icon: Calendar },
+        { href: `/workspace/${activeWsId}/settings`, label: "Settings", icon: Settings },
       ]
     : []
 
@@ -224,10 +241,10 @@ export function AppShell({
             ))}
           </nav>
 
-          {activeWs && (
+          {activeWsId && (
             <div className="px-3 pb-3">
               <div className="text-muted-foreground px-3 pb-1 text-[11px] font-medium tracking-wide uppercase">
-                {activeWs.name}
+                {activeWs?.name ?? "Workspace"}
               </div>
               <nav className="space-y-1">
                 {wsNav.map((item) => (
@@ -240,6 +257,18 @@ export function AppShell({
               </nav>
             </div>
           )}
+
+          <div className="mt-2 border-t px-3 py-3">
+            <nav className="space-y-1">
+              {bottomNav.map((item) => (
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  active={pathname === item.href || pathname.startsWith(item.href + "/")}
+                />
+              ))}
+            </nav>
+          </div>
         </ScrollArea>
       </aside>
 
@@ -262,10 +291,10 @@ export function AppShell({
                 />
               ))}
             </nav>
-            {activeWs && (
+            {activeWsId && (
               <div className="px-3 pb-3">
                 <div className="text-muted-foreground px-3 pb-1 text-[11px] font-medium uppercase">
-                  {activeWs.name}
+                  {activeWs?.name ?? "Workspace"}
                 </div>
                 <nav className="space-y-1">
                   {wsNav.map((item) => (
