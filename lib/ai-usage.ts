@@ -18,9 +18,24 @@ const PRICING: Record<string, { in: number; out: number }> = {
 function priceFor(model: string) {
   return PRICING[model] ?? PRICING[Object.keys(PRICING).find((k) => model.startsWith(k)) ?? ""] ?? { in: 5, out: 25 }
 }
-export function costUsd(model: string, inTok: number, outTok: number): number {
+// Full per-call cost. `inTok` (Anthropic's input_tokens) already EXCLUDES cached
+// tokens — cache reads/writes are billed separately: a cache read ≈ 0.1x the
+// input rate, a cache write (5m TTL) ≈ 1.25x. Counting them is what makes the
+// caching savings show up correctly instead of being invisible.
+export function costUsd(
+  model: string,
+  inTok: number,
+  outTok: number,
+  cacheReadTok = 0,
+  cacheCreateTok = 0
+): number {
   const p = priceFor(model)
-  return (inTok / 1e6) * p.in + (outTok / 1e6) * p.out
+  return (
+    (inTok / 1e6) * p.in +
+    (cacheReadTok / 1e6) * p.in * 0.1 +
+    (cacheCreateTok / 1e6) * p.in * 1.25 +
+    (outTok / 1e6) * p.out
+  )
 }
 
 // Default per-user monthly cap (USD). Admins/super-admins are exempt.
@@ -59,24 +74,42 @@ export async function userAnthropicKey(userId: string): Promise<string | undefin
 // Record one model call (best-effort). Reads the active context for attribution.
 export async function recordAiUsage(
   model: string,
-  usage: { input_tokens?: number; output_tokens?: number } | null | undefined
+  usage:
+    | {
+        input_tokens?: number
+        output_tokens?: number
+        cache_read_input_tokens?: number | null
+        cache_creation_input_tokens?: number | null
+      }
+    | null
+    | undefined
 ): Promise<void> {
   const ctx = store.getStore() ?? {}
   const inTok = usage?.input_tokens ?? 0
   const outTok = usage?.output_tokens ?? 0
+  const cacheRead = usage?.cache_read_input_tokens ?? 0
+  const cacheCreate = usage?.cache_creation_input_tokens ?? 0
+  const base = {
+    id: randomUUID(),
+    user_id: ctx.userId ?? null,
+    workspace_id: ctx.workspaceId ?? null,
+    project_id: ctx.projectId ?? null,
+    feature: ctx.feature ?? "chat",
+    model,
+    input_tokens: inTok,
+    output_tokens: outTok,
+    cost_usd: Number(costUsd(model, inTok, outTok, cacheRead, cacheCreate).toFixed(6)),
+    created_at: new Date().toISOString(),
+  }
   try {
-    await sb().from("ai_usage").insert({
-      id: randomUUID(),
-      user_id: ctx.userId ?? null,
-      workspace_id: ctx.workspaceId ?? null,
-      project_id: ctx.projectId ?? null,
-      feature: ctx.feature ?? "chat",
-      model,
-      input_tokens: inTok,
-      output_tokens: outTok,
-      cost_usd: Number(costUsd(model, inTok, outTok).toFixed(6)),
-      created_at: new Date().toISOString(),
-    })
+    // Capture cache tokens so cache effectiveness is measurable. The columns ship
+    // in supabase/ai-usage.sql; if the migration hasn't run yet the insert with
+    // the extra columns errors, so we retry without them — governance logging
+    // keeps working either way (best-effort).
+    const { error } = await sb()
+      .from("ai_usage")
+      .insert({ ...base, cache_read_tokens: cacheRead, cache_creation_tokens: cacheCreate })
+    if (error) await sb().from("ai_usage").insert(base)
   } catch {
     /* governance logging is best-effort */
   }

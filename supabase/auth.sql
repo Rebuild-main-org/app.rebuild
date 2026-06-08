@@ -15,12 +15,14 @@ create table if not exists profiles (
 alter table profiles enable row level security;
 
 -- A signed-in user can read and update only their own profile.
+-- auth.uid() is wrapped in a scalar sub-select so Postgres evaluates it ONCE per
+-- query (initplan) instead of once per row — see the auth_rls_initplan linter.
 drop policy if exists profiles_self_read on profiles;
 create policy profiles_self_read on profiles
-  for select using (auth.uid() = id);
+  for select using ((select auth.uid()) = id);
 drop policy if exists profiles_self_update on profiles;
 create policy profiles_self_update on profiles
-  for update using (auth.uid() = id) with check (auth.uid() = id);
+  for update using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 
 -- Auto-create a profile when a new auth user signs up.
 -- The project owner email is bootstrapped as ADMIN; everyone else ENGINEER.

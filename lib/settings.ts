@@ -11,6 +11,11 @@ import { sb } from "./data"
 // is set or the settings table isn't reachable.
 export const DEFAULT_AI_MODEL = process.env.AI_MODEL ?? "claude-opus-4-8"
 
+// The cheap-tier model for trivial tasks (triage, summaries, standup, changelog,
+// docs). Hard reasoning (review, scaffold, spec critique) stays on DEFAULT_AI_MODEL.
+// See lib/ai.ts trackedCreate({ tier: "cheap" }).
+export const DEFAULT_AI_CHEAP_MODEL = process.env.AI_CHEAP_MODEL ?? "claude-haiku-4-5"
+
 // Models a SUPER_ADMIN may select. Keep ids exact (no date suffixes).
 export const AI_MODELS: { id: string; label: string }[] = [
   { id: "claude-opus-4-8", label: "Claude Opus 4.8" },
@@ -60,6 +65,16 @@ export async function getAiModel(): Promise<string> {
 export async function setAiModel(model: string, updatedBy?: string): Promise<void> {
   if (!isKnownModel(model)) throw new Error("Unknown model")
   await setSetting("ai_model", model, updatedBy)
+}
+
+// The cheap-tier model used for trivial tasks. Admin-configurable like ai_model;
+// defaults to Haiku so cheap calls never pay Opus rates.
+export async function getCheapAiModel(): Promise<string> {
+  return getSetting("ai_model_cheap", DEFAULT_AI_CHEAP_MODEL)
+}
+export async function setCheapAiModel(model: string, updatedBy?: string): Promise<void> {
+  if (!isKnownModel(model)) throw new Error("Unknown model")
+  await setSetting("ai_model_cheap", model, updatedBy)
 }
 
 // --- CLI model (rebuild216 / agent engine) ----------------------------------

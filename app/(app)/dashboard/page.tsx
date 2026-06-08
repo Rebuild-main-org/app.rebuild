@@ -15,7 +15,8 @@ import {
   projectsForWorkspace,
   workspacesForUser,
 } from "@/lib/queries"
-import { ghUserCommitsSince, ghUserOpenPRs, githubEnabled } from "@/lib/github"
+import { githubEnabled } from "@/lib/github"
+import { ghUserCommitsSinceCached, ghUserOpenPRsCached } from "@/lib/gh-cache"
 import { PROJECT_STATUS_META, type Project, type ProjectStatus } from "@/lib/types"
 import { ProjectStatusBadge } from "@/components/shared/badges"
 import { Badge } from "@/components/ui/badge"
@@ -70,8 +71,8 @@ export default async function DashboardPage() {
   const canFetchGit = githubEnabled() && !!ghLogin
   const [commitArrays, prArrays] = canFetchGit
     ? await Promise.all([
-        Promise.all(repos.map((r) => ghUserCommitsSince(r, ghLogin, sinceISO))),
-        Promise.all(repos.map((r) => ghUserOpenPRs(r, ghLogin))),
+        Promise.all(repos.map((r) => ghUserCommitsSinceCached(r, ghLogin, sinceISO))),
+        Promise.all(repos.map((r) => ghUserOpenPRsCached(r, ghLogin))),
       ])
     : [[], []]
   const myCommitsToday = commitArrays.flat()

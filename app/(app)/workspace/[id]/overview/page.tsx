@@ -13,7 +13,8 @@ import {
   projectsForWorkspace,
   ticketsForWorkspace,
 } from "@/lib/queries"
-import { ghRecentChangesAllBranches, githubEnabled } from "@/lib/github"
+import { githubEnabled } from "@/lib/github"
+import { ghRecentChangesAllBranchesCached } from "@/lib/gh-cache"
 import { estimationAccuracy } from "@/lib/analytics"
 import { workspaceAiSpend } from "@/lib/ai-usage"
 import { cn } from "@/lib/utils"
@@ -56,7 +57,7 @@ export default async function OverviewPage({
   // (one repo per workspace, one branch per project).
   const recentChanges =
     ws.githubRepo && ws.githubRepo.includes("/") && githubEnabled()
-      ? await ghRecentChangesAllBranches(ws.githubRepo, 6)
+      ? await ghRecentChangesAllBranchesCached(ws.githubRepo, 6)
       : []
   const activeProjects = projects.filter((p) => p.status === "ACTIVE")
   const openTickets = tickets.filter((t) => t.status !== "DONE")

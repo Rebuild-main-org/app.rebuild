@@ -5,7 +5,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 
 import { currentApiKey, recordAiUsage } from "./ai-usage"
-import { getAiModel } from "./settings"
+import { getAiModel, getCheapAiModel } from "./settings"
 import { loadSystemPrompt } from "./doc-loader"
 import type { SpecForm, SpecRevision } from "./blueprint-types"
 
@@ -33,16 +33,24 @@ function getClient(): Anthropic {
   return client
 }
 
+// Model tier: "smart" = the SUPER_ADMIN's chosen model (hard reasoning: code
+// review, scaffold, spec critique/revision/extraction, copilot). "cheap" = the
+// Haiku-class model for trivial tasks (triage, summaries, standup, changelog,
+// docs) — same work, a fraction of the cost.
+export type ModelTier = "smart" | "cheap"
+
 // Every model call goes through here so usage/cost is logged for governance.
 async function trackedCreate(
-  params: Anthropic.Messages.MessageCreateParamsNonStreaming
+  params: Anthropic.Messages.MessageCreateParamsNonStreaming,
+  opts: { tier?: ModelTier } = {}
 ): Promise<Anthropic.Messages.Message> {
   // Use the caller's connected Anthropic key if any (« Connect with Claude »),
   // else the shared server client.
   const key = currentApiKey()
   const client = key ? new Anthropic({ apiKey: key }) : getClient()
-  // The active model is a runtime setting a SUPER_ADMIN can change for everyone.
-  const model = await getAiModel()
+  // The active model is a runtime setting a SUPER_ADMIN can change for everyone;
+  // cheap-tier calls resolve the (also admin-configurable) Haiku-class model.
+  const model = opts.tier === "cheap" ? await getCheapAiModel() : await getAiModel()
   const res = await client.messages.create({ ...params, model })
   await recordAiUsage(model, res.usage)
   return res
@@ -55,14 +63,17 @@ function systemBlocks(text: string) {
   ]
 }
 
-async function completeText(system: string, user: string, maxTokens = 1024) {
-  const res = await trackedCreate({
-    model: MODEL,
-    max_tokens: maxTokens,
-    thinking: { type: "adaptive" },
-    system: systemBlocks(system),
-    messages: [{ role: "user", content: user }],
-  })
+async function completeText(system: string, user: string, maxTokens = 1024, tier: ModelTier = "smart") {
+  const res = await trackedCreate(
+    {
+      model: MODEL,
+      max_tokens: maxTokens,
+      thinking: { type: "adaptive" },
+      system: systemBlocks(system),
+      messages: [{ role: "user", content: user }],
+    },
+    { tier }
+  )
   return res.content
     .map((b) => (b.type === "text" ? b.text : ""))
     .join("")
@@ -156,7 +167,8 @@ export async function generateDocs(input: { path: string; code: string }): Promi
   return completeText(
     "You generate clear technical documentation. Produce concise Markdown: a one-line summary, key responsibilities, and JSDoc/docstring suggestions for exported symbols. No preamble.",
     `File: ${input.path}\n\n${input.code}`,
-    1500
+    1500,
+    "cheap"
   )
 }
 
@@ -219,21 +231,24 @@ export async function triageTicket(input: {
   const roster = input.candidates
     .map((c) => `- ${c.id} \u00b7 ${c.name} (${c.role}), ${c.openLoad} open tickets`)
     .join("\n")
-  const res = await trackedCreate({
-    model: MODEL,
-    max_tokens: 1024,
-    thinking: { type: "adaptive" },
-    system: systemBlocks(
-      "You triage incoming engineering tickets. Choose the type and priority, and suggest the best assignee id from the roster (prefer matching skill/role and lower load). If none fit, return null. Justify in one sentence."
-    ),
-    messages: [
-      {
-        role: "user",
-        content: `Title: ${input.title}\nDescription: ${input.description}\n\nRoster:\n${roster || "(none)"}`,
-      },
-    ],
-    output_config: { format: { type: "json_schema", schema: TRIAGE_SCHEMA } },
-  })
+  const res = await trackedCreate(
+    {
+      model: MODEL,
+      max_tokens: 1024,
+      thinking: { type: "adaptive" },
+      system: systemBlocks(
+        "You triage incoming engineering tickets. Choose the type and priority, and suggest the best assignee id from the roster (prefer matching skill/role and lower load). If none fit, return null. Justify in one sentence."
+      ),
+      messages: [
+        {
+          role: "user",
+          content: `Title: ${input.title}\nDescription: ${input.description}\n\nRoster:\n${roster || "(none)"}`,
+        },
+      ],
+      output_config: { format: { type: "json_schema", schema: TRIAGE_SCHEMA } },
+    },
+    { tier: "cheap" }
+  )
   const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("")
   return JSON.parse(text) as TriageSuggestion
 }
@@ -298,7 +313,8 @@ export async function standupDigest(content: string): Promise<string> {
   return completeText(
     "You write a concise daily standup for an engineering workspace. Three short sections: Shipped, In progress, Blockers/at-risk. Bullet points, no fluff.",
     content,
-    800
+    800,
+    "cheap"
   )
 }
 
@@ -306,7 +322,8 @@ export async function changelogFromPRs(content: string): Promise<string> {
   return completeText(
     "You write release notes from merged pull requests. Group into Features, Fixes, and Chores. One concise bullet per change, user-facing language. Markdown only, no preamble.",
     content,
-    1200
+    1200,
+    "cheap"
   )
 }
 
@@ -319,7 +336,8 @@ export async function summarize(input: {
   return completeText(
     `You summarise ${input.kind} status for a busy reader in plain language. 3-5 sentences, no jargon, highlight what's done, in progress, and at risk.`,
     input.content,
-    800
+    800,
+    "cheap"
   )
 }
 
@@ -620,20 +638,29 @@ export async function critiqueSpec(input: {
 }): Promise<SpecCritiqueResult> {
   const lang = input.outputLanguage ?? "fr"
   const template = loadSystemPrompt("spec-critique") ?? SPEC_CRITIQUE_SYSTEM
-  const system = template
-    .split("{{spec_yaml}}").join(input.spec)
-    .split("{{answers}}").join(input.answers ?? "")
+  // Cache-friendly split. The prompt's static instructions (everything before
+  // "Spec to review:") go in the cached system block — identical across specs and
+  // clarification rounds, so the prompt cache actually HITS. The variable spec +
+  // answers move to the user message, so we stop paying the cache-creation
+  // premium (1.25x) on the whole spec every call (it used to be baked into the
+  // cached block and never reused). Both the on-disk prompt and the inline
+  // fallback share the "Spec to review:" marker.
+  const instructions = template
+    .split("Spec to review:")[0]
     .split("{{output_language}}").join(lang)
+    .trim()
+  const userContent =
+    `Spec to review:\n\`\`\`yaml\n${input.spec}\n\`\`\`\n\n` +
+    `Previous human resolutions (may be empty):\n\`\`\`\n${input.answers ?? ""}\n\`\`\`\n\n` +
+    "Audit the spec above and respond with JSON only matching the schema."
   const res = await trackedCreate({
     model: MODEL,
     // Generous budget: adaptive thinking also draws from max_tokens, and the
     // critique JSON (many findings/questions) must complete or it truncates.
     max_tokens: 12000,
     thinking: { type: "adaptive" },
-    system: systemBlocks(system),
-    messages: [
-      { role: "user", content: "Audit the spec embedded above and respond with JSON only matching the schema." },
-    ],
+    system: systemBlocks(instructions),
+    messages: [{ role: "user", content: userContent }],
     output_config: { format: { type: "json_schema", schema: SPEC_CRITIQUE_SCHEMA } },
   })
   const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim()
