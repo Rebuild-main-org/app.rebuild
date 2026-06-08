@@ -626,7 +626,9 @@ export async function critiqueSpec(input: {
     .split("{{output_language}}").join(lang)
   const res = await trackedCreate({
     model: MODEL,
-    max_tokens: 2048,
+    // Generous budget: adaptive thinking also draws from max_tokens, and the
+    // critique JSON (many findings/questions) must complete or it truncates.
+    max_tokens: 12000,
     thinking: { type: "adaptive" },
     system: systemBlocks(system),
     messages: [
@@ -634,8 +636,12 @@ export async function critiqueSpec(input: {
     ],
     output_config: { format: { type: "json_schema", schema: SPEC_CRITIQUE_SCHEMA } },
   })
-  const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("")
-  return JSON.parse(text) as SpecCritiqueResult
+  const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim()
+  try {
+    return JSON.parse(text) as SpecCritiqueResult
+  } catch {
+    throw new Error("Réponse IA tronquée — réessaie (la spec est peut-être très longue).")
+  }
 }
 
 // --- Spec form extraction (fill the guided wizard from a markdown doc) -------
@@ -723,7 +729,7 @@ const SPEC_FORM_SCHEMA = {
 export async function extractSpecForm(content: string): Promise<SpecForm> {
   const res = await trackedCreate({
     model: MODEL,
-    max_tokens: 4096,
+    max_tokens: 12000,
     thinking: { type: "adaptive" },
     system: systemBlocks(
       "You convert a free-form project brief / architecture document into the structured fields of an intake form. Extract only what the document states; leave a field as an empty string (or empty array) when it is not stated — NEVER invent NFR numbers, SLOs, latency budgets or scale figures. `stack` is comma/newline-separated. Each entity's `accessPatterns` and the `qualityGates` are newline-separated. `consistency.level` is 'strong' or 'eventual'. Set `pii: true` only when personal data is clearly involved."
@@ -731,6 +737,10 @@ export async function extractSpecForm(content: string): Promise<SpecForm> {
     messages: [{ role: "user", content: `Document:\n\n${content.slice(0, 40000)}` }],
     output_config: { format: { type: "json_schema", schema: SPEC_FORM_SCHEMA } },
   })
-  const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("")
-  return JSON.parse(text) as SpecForm
+  const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim()
+  try {
+    return JSON.parse(text) as SpecForm
+  } catch {
+    throw new Error("Réponse IA tronquée — réessaie avec un document plus court.")
+  }
 }
