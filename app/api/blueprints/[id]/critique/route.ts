@@ -2,7 +2,7 @@ import { getSessionUser } from "@/lib/auth/session"
 import { canAccessSection } from "@/lib/permissions"
 import { AINotConfiguredError, critiqueSpec } from "@/lib/ai"
 import { AiBudgetError, withAi } from "@/lib/ai-usage"
-import { getBlueprint, updateBlueprint } from "@/lib/blueprints"
+import { CRITIQUE_PASS_SCORE, getBlueprint, updateBlueprint } from "@/lib/blueprints"
 
 export const dynamic = "force-dynamic"
 
@@ -25,11 +25,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const result = await withAi(user, "spec-critique", () =>
       critiqueSpec({ spec: bp.specYaml, answers: bp.answers })
     )
-    await updateBlueprint(id, {
+    // Gate passes from the score threshold (e.g. ≥ 55%), not strict READY.
+    const pass = (result.spec_quality_score ?? 0) >= CRITIQUE_PASS_SCORE
+    const updated = await updateBlueprint(id, {
       critique: result,
-      gates: { ...bp.gates, critique: result.readiness === "READY" },
+      gates: { ...bp.gates, critique: pass },
     })
-    return Response.json(result)
+    return Response.json({ ...result, pass, blueprint: updated })
   } catch (e) {
     if (e instanceof AiBudgetError) return Response.json({ error: e.message }, { status: 429 })
     if (e instanceof AINotConfiguredError) return Response.json({ error: e.message }, { status: 503 })

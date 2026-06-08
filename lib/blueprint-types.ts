@@ -55,6 +55,10 @@ export const PREREQ_ITEMS: { key: string; label: string }[] = [
 
 export type Gates = Partial<Record<GateKey, boolean>>
 
+// The critique gate passes when the spec quality score reaches this threshold
+// (softer than requiring readiness === "READY" / zero blockers).
+export const CRITIQUE_PASS_SCORE = 55
+
 export interface BlueprintDoc {
   id: string
   name: string

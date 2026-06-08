@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import {
   ALL_GATES,
   BLUEPRINT_STEPS,
+  CRITIQUE_PASS_SCORE,
   PREREQ_ITEMS,
   canApprove,
   pendingGates,
@@ -160,15 +161,18 @@ export function BlueprintPipeline({
       if (spec !== bp.specYaml) await api("", { method: "PATCH", body: JSON.stringify({ specYaml: spec }) })
       if (answers !== bp.answers) await api("", { method: "PATCH", body: JSON.stringify({ answers }) })
       const result = await api("/critique", { method: "POST" })
-      setBp((b) => ({
-        ...b,
-        specYaml: spec,
-        answers,
-        critique: result,
-        gates: { ...b.gates, critique: result.readiness === "READY" },
-      }))
-      toast[result.readiness === "READY" ? "success" : "error"](
-        result.readiness === "READY" ? "READY — aucun bloqueur" : "BLOCK — voir les findings"
+      const pass = result.pass ?? (result.spec_quality_score ?? 0) >= CRITIQUE_PASS_SCORE
+      if (result.blueprint) setBp(result.blueprint)
+      else
+        setBp((b) => ({
+          ...b,
+          specYaml: spec,
+          answers,
+          critique: result,
+          gates: { ...b.gates, critique: pass },
+        }))
+      toast[pass ? "success" : "error"](
+        pass ? `Gate OK — score ${result.spec_quality_score}%` : `Score ${result.spec_quality_score}% (< ${CRITIQUE_PASS_SCORE}%)`
       )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Échec")
@@ -432,7 +436,7 @@ export function BlueprintPipeline({
             <CardTitle className="text-base">3 · Critique de spec (IA)</CardTitle>
             <GateBadge on={bp.gates.critique} />
           </div>
-          <CardDescription>Gate : readiness === &quot;READY&quot; (zéro BLOCKER, zéro question bloquante).</CardDescription>
+          <CardDescription>Gate : score de qualité ≥ {CRITIQUE_PASS_SCORE}% (la résolution des BLOCKER reste recommandée).</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Button onClick={runCritique} disabled={readOnly || busy === "critique"} className="gap-2">
