@@ -28,8 +28,26 @@ function seedForm(f?: SpecForm): Form {
     entities: arr(f.entities, EMPTY_SPEC_FORM.entities),
     integrations: arr(f.integrations, EMPTY_SPEC_FORM.integrations),
     compliance: f.compliance ?? [],
+    languages: f.languages ?? [],
+    ui: f.ui ?? [],
+    mcps: f.mcps ?? [],
   }
 }
+
+// Curated chip options per group (each group also accepts free « Autre… » values).
+const LANG_OPTIONS = [
+  "TypeScript", "JavaScript", "Node.js", "Next.js", "React", "Vue", "Nuxt", "SvelteKit",
+  "Angular", "Astro", "Remix", "SolidJS", "NestJS", "Python/FastAPI", "Django", "Go",
+  "Ruby on Rails", "PHP/Laravel", "Java/Spring", ".NET",
+]
+const UI_OPTIONS = [
+  "shadcn/ui", "Tailwind CSS", "Radix UI", "MUI", "Chakra UI", "Mantine", "Ant Design",
+  "Headless UI", "DaisyUI", "Bootstrap", "styled-components", "CSS Modules",
+]
+const MCP_OPTIONS = [
+  "Figma", "GitHub", "Supabase", "Vercel", "Postgres", "Stripe", "Linear", "Notion",
+  "Slack", "Sentry", "Browser/Playwright", "Filesystem",
+]
 
 const COMPLIANCE_OPTIONS = ["GDPR", "PCI-DSS", "HIPAA", "SOC2"]
 const STEPS = [
@@ -51,8 +69,19 @@ function buildSpecYaml(f: Form, figmaUrl: string, docNames: string[]): string {
   L.push(`name: ${Q(f.name)}`)
   L.push(`summary: ${Q(f.summary)}`)
   L.push(`deploy_target: ${Q(f.deployTarget)}`)
-  L.push(`stack:`)
-  for (const s of toList(f.stack)) L.push(`  - ${Q(s)}`)
+  const inlineArr = (key: string, arr: string[]) => {
+    if (arr.length) L.push(`  ${key}: [${arr.map(Q).join(", ")}]`)
+  }
+  const other = toList(f.stack)
+  if (f.languages.length || f.ui.length || f.mcps.length || other.length) {
+    L.push(`stack:`)
+    inlineArr("languages", f.languages)
+    inlineArr("ui", f.ui)
+    inlineArr("mcps", f.mcps)
+    inlineArr("other", other)
+  } else {
+    L.push(`stack: {}`)
+  }
   L.push(`use_cases:`)
   for (const u of f.useCases.filter((x) => x.name)) {
     L.push(`  - name: ${Q(u.name)}`)
@@ -113,7 +142,7 @@ function missingFields(f: Form): string[] {
   const m: string[] = []
   if (!f.name.trim()) m.push("Nom du projet")
   if (!f.summary.trim()) m.push("Résumé")
-  if (!f.stack.trim()) m.push("Stack")
+  if (f.languages.length === 0) m.push("Langages / frameworks (≥ 1)")
   if (!f.useCases.some((u) => u.name && u.acceptance)) m.push("≥ 1 cas d'usage avec critère d'acceptation")
   if (!f.scale.trim()) m.push("Échelle / volumétrie")
   if (!f.availabilitySlo.trim()) m.push("SLO de disponibilité")
@@ -303,9 +332,12 @@ export function SpecWizard({
         )}
 
         {step === 4 && (
-          <div className="space-y-3">
-            <Field label="Stack (un élément par ligne ou séparé par des virgules)">
-              <Textarea value={f.stack} onChange={(e) => set("stack", e.target.value)} rows={3} placeholder="Next.js, Postgres, Redis, …" />
+          <div className="space-y-4">
+            <ChipGroup title="Langages & frameworks web → stack.languages" options={LANG_OPTIONS} selected={f.languages} onChange={(v) => set("languages", v)} />
+            <ChipGroup title="UI / composants → stack.ui" options={UI_OPTIONS} selected={f.ui} onChange={(v) => set("ui", v)} />
+            <ChipGroup title="MCP → stack.mcps" options={MCP_OPTIONS} selected={f.mcps} onChange={(v) => set("mcps", v)} />
+            <Field label="Autres (datastore / cache / queue…, libre)">
+              <Input value={f.stack} onChange={(e) => set("stack", e.target.value)} placeholder="Postgres, Redis, SQS, …" />
             </Field>
             <Repeatable
               title="Intégrations"
@@ -446,6 +478,73 @@ function upd<K extends keyof Form>(
   const arr = [...(f[key] as unknown as Record<string, unknown>[])]
   arr[i] = { ...arr[i], ...(patch as Record<string, unknown>) }
   set(key, arr as unknown as Form[K])
+}
+
+// Multi-select chips + a free « Autre… » input. Selected values not in `options`
+// (custom entries) are rendered as removable chips too.
+function ChipGroup({
+  title,
+  options,
+  selected,
+  onChange,
+}: {
+  title: string
+  options: string[]
+  selected: string[]
+  onChange: (v: string[]) => void
+}) {
+  const [custom, setCustom] = useState("")
+  const toggle = (v: string) =>
+    onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v])
+  const addCustom = () => {
+    const v = custom.trim()
+    if (v && !selected.includes(v)) onChange([...selected, v])
+    setCustom("")
+  }
+  const customs = selected.filter((s) => !options.includes(s))
+
+  const chip = (label: string, on: boolean, onClick: () => void) => (
+    <button
+      key={label}
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+        on
+          ? "border-primary bg-primary/10 text-primary"
+          : "text-muted-foreground hover:text-foreground hover:border-foreground/30"
+      }`}
+    >
+      {label}
+      {on && customs.includes(label) ? " ✕" : ""}
+    </button>
+  )
+
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-medium">{title}</label>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((o) => chip(o, selected.includes(o), () => toggle(o)))}
+        {customs.map((o) => chip(o, true, () => toggle(o)))}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              addCustom()
+            }
+          }}
+          placeholder="Autre…"
+          className="h-8"
+        />
+        <Button type="button" variant="outline" size="sm" onClick={addCustom} disabled={!custom.trim()}>
+          <Plus className="size-3.5" /> Ajouter
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

@@ -179,20 +179,38 @@ export function AppShell({
 
   // Sections gated by the super-admin permissions matrix (allowedSections).
   const sec = (key: string) => allowedSections.includes(key)
-  const globalNav: NavItem[] = [
-    { href: "/how-to-use", label: "How to use?", icon: BookOpen },
-    ...(sec("dashboard") ? [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
-    ...(sec("blueprints") ? [{ href: "/blueprints", label: "Blueprints", icon: ClipboardCheck }] : []),
-    ...(sec("workspaces") ? [{ href: "/workspaces", label: "Workspaces", icon: Boxes }] : []),
-    ...(sec("crm") ? [{ href: "/crm", label: "CRM", icon: Briefcase }] : []),
-    ...(sec("support") ? [{ href: "/support", label: "Support", icon: LifeBuoy }] : []),
-    // Discord — community directory + direct messages, open to everyone.
-    { href: "/discord", label: "Discord", icon: Users2, badge: dmUnread || undefined },
-    // rebuild216 CLI — in-app connection guide.
-    { href: "/rebuild216", label: "rebuild216 CLI", icon: TerminalSquare },
-    ...(sec("analytics") ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }] : []),
-    ...(sec("reports") ? [{ href: "/reports", label: "Reports", icon: FileBarChart }] : []),
-  ]
+  // Sidebar organised into labelled groups (empty groups are dropped).
+  const navGroups: { label?: string; items: NavItem[] }[] = [
+    {
+      items: [
+        ...(sec("dashboard") ? [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
+        ...(sec("blueprints") ? [{ href: "/blueprints", label: "Blueprints", icon: ClipboardCheck }] : []),
+        ...(sec("workspaces") ? [{ href: "/workspaces", label: "Workspaces", icon: Boxes }] : []),
+      ],
+    },
+    {
+      label: "Commercial",
+      items: [
+        ...(sec("crm") ? [{ href: "/crm", label: "CRM", icon: Briefcase }] : []),
+        ...(sec("support") ? [{ href: "/support", label: "Support", icon: LifeBuoy }] : []),
+      ],
+    },
+    {
+      label: "Analyse",
+      items: [
+        ...(sec("analytics") ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }] : []),
+        ...(sec("reports") ? [{ href: "/reports", label: "Reports", icon: FileBarChart }] : []),
+      ],
+    },
+    {
+      label: "Outils",
+      items: [
+        { href: "/discord", label: "Discord", icon: Users2, badge: dmUnread || undefined },
+        { href: "/rebuild216", label: "rebuild216 CLI", icon: TerminalSquare },
+        { href: "/how-to-use", label: "How to use?", icon: BookOpen },
+      ],
+    },
+  ].filter((g) => g.items.length > 0)
 
   // Account / admin shortcuts (also in the avatar menu) — surfaced in the sidebar.
   const bottomNav: NavItem[] = [
@@ -231,13 +249,22 @@ export function AppShell({
         </div>
 
         <ScrollArea className="flex-1">
-          <nav className="space-y-1 p-3">
-            {globalNav.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                active={pathname === item.href || pathname.startsWith(item.href + "/")}
-              />
+          <nav className="space-y-4 p-3">
+            {navGroups.map((g, gi) => (
+              <div key={gi} className="space-y-1">
+                {g.label && (
+                  <div className="text-muted-foreground px-3 pb-1 text-[11px] font-medium tracking-wide uppercase">
+                    {g.label}
+                  </div>
+                )}
+                {g.items.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    active={pathname === item.href || pathname.startsWith(item.href + "/")}
+                  />
+                ))}
+              </div>
             ))}
           </nav>
 
@@ -281,14 +308,23 @@ export function AppShell({
             <img src="/logo.png" alt="REBUILD" className="h-6 w-auto object-contain brightness-0 dark:invert" />
           </SheetTitle>
           <ScrollArea className="h-[calc(100svh-3.5rem)]">
-            <nav className="space-y-1 p-3">
-              {globalNav.map((item) => (
-                <NavLink
-                  key={item.href}
-                  item={item}
-                  active={pathname === item.href || pathname.startsWith(item.href + "/")}
-                  onClick={() => setMobileNav(false)}
-                />
+            <nav className="space-y-4 p-3">
+              {navGroups.map((g, gi) => (
+                <div key={gi} className="space-y-1">
+                  {g.label && (
+                    <div className="text-muted-foreground px-3 pb-1 text-[11px] font-medium uppercase">
+                      {g.label}
+                    </div>
+                  )}
+                  {g.items.map((item) => (
+                    <NavLink
+                      key={item.href}
+                      item={item}
+                      active={pathname === item.href || pathname.startsWith(item.href + "/")}
+                      onClick={() => setMobileNav(false)}
+                    />
+                  ))}
+                </div>
               ))}
             </nav>
             {activeWsId && (
@@ -308,6 +344,19 @@ export function AppShell({
                 </nav>
               </div>
             )}
+
+            <div className="mt-2 border-t px-3 py-3">
+              <nav className="space-y-1">
+                {bottomNav.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    active={pathname === item.href || pathname.startsWith(item.href + "/")}
+                    onClick={() => setMobileNav(false)}
+                  />
+                ))}
+              </nav>
+            </div>
           </ScrollArea>
           </div>
         </SheetContent>

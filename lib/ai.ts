@@ -655,7 +655,10 @@ const SPEC_FORM_SCHEMA = {
     name: { type: "string" },
     summary: { type: "string" },
     deployTarget: { type: "string" },
-    stack: { type: "string", description: "comma- or newline-separated tech list" },
+    stack: { type: "string", description: "other tech (datastore/cache/queue), comma/newline-separated" },
+    languages: { type: "array", items: { type: "string" }, description: "languages & web frameworks" },
+    ui: { type: "array", items: { type: "string" }, description: "UI / component libraries" },
+    mcps: { type: "array", items: { type: "string" }, description: "MCP integrations (Figma, GitHub, Supabase…)" },
     useCases: {
       type: "array",
       items: {
@@ -720,9 +723,9 @@ const SPEC_FORM_SCHEMA = {
     qualityGates: { type: "string", description: "one gate per line" },
   },
   required: [
-    "name", "summary", "deployTarget", "stack", "useCases", "scale", "availabilitySlo",
-    "errorBudget", "retention", "latencyPaths", "consistency", "compliance", "entities",
-    "integrations", "coverageTarget", "loadTestTarget", "qualityGates",
+    "name", "summary", "deployTarget", "stack", "languages", "ui", "mcps", "useCases",
+    "scale", "availabilitySlo", "errorBudget", "retention", "latencyPaths", "consistency",
+    "compliance", "entities", "integrations", "coverageTarget", "loadTestTarget", "qualityGates",
   ],
 } as const
 
@@ -795,7 +798,7 @@ export async function extractSpecForm(content: string): Promise<SpecForm> {
     max_tokens: 12000,
     thinking: { type: "adaptive" },
     system: systemBlocks(
-      "You convert a free-form project brief / architecture document into the structured fields of an intake form. Extract only what the document states; leave a field as an empty string (or empty array) when it is not stated — NEVER invent NFR numbers, SLOs, latency budgets or scale figures. `stack` is comma/newline-separated. Each entity's `accessPatterns` and the `qualityGates` are newline-separated. `consistency.level` is 'strong' or 'eventual'. Set `pii: true` only when personal data is clearly involved."
+      "You convert a free-form project brief / architecture document into the structured fields of an intake form. Extract only what the document states; leave a field as an empty string (or empty array) when it is not stated — NEVER invent NFR numbers, SLOs, latency budgets or scale figures. `languages` = languages & web frameworks, `ui` = UI/component libraries, `mcps` = MCP integrations; `stack` holds other tech (datastore/cache/queue), comma/newline-separated. Each entity's `accessPatterns` and the `qualityGates` are newline-separated. `consistency.level` is 'strong' or 'eventual'. Set `pii: true` only when personal data is clearly involved."
     ),
     messages: [{ role: "user", content: `Document:\n\n${content.slice(0, 40000)}` }],
     output_config: { format: { type: "json_schema", schema: SPEC_FORM_SCHEMA } },

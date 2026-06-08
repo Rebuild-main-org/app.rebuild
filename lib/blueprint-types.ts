@@ -101,6 +101,9 @@ export interface SpecForm {
   summary: string
   deployTarget: string
   stack: string
+  languages: string[]
+  ui: string[]
+  mcps: string[]
   useCases: SpecUseCase[]
   scale: string
   availabilitySlo: string
@@ -121,6 +124,9 @@ export const EMPTY_SPEC_FORM: SpecForm = {
   summary: "",
   deployTarget: "",
   stack: "",
+  languages: [],
+  ui: [],
+  mcps: [],
   useCases: [{ name: "", actor: "", acceptance: "" }],
   scale: "",
   availabilitySlo: "",
