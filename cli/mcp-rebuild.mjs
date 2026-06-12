@@ -17,7 +17,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 
-const URL_BASE = process.env.REBUILD_URL || "http://localhost:3000"
+const URL_BASE = process.env.REBUILD_URL 
 let TOKEN = process.env.REBUILD_TOKEN || ""
 let REFRESH = process.env.REBUILD_REFRESH_TOKEN || ""
 const PROJECT = process.env.REBUILD_PROJECT || ""

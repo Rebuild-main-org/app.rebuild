@@ -453,11 +453,30 @@ function authLine(cfg) {
   return c.dim("Auth: claude login (personal subscription)")
 }
 
+// Optional numeric guard-rail from env (preferred) or stored config. Returns 0
+// (= off) unless a positive number is set, so it never caps a run by surprise.
+function numOpt(cfg, envName, cfgKey) {
+  const raw = process.env[envName] ?? (cfg ? cfg[cfgKey] : undefined)
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
 function agentOptions(workDir, cfg, project, resume) {
   const key = anthropicKey(cfg)
+  // F4 — agent guard-rails (budget + step cap + early stop). OFF unless set, so
+  // long multi-ticket runs aren't capped by surprise. maxBudgetUsd stops the run
+  // at a $ ceiling (→ error_max_budget_usd); maxTurns caps conversation steps;
+  // taskBudget makes the model aware of its remaining token budget so it paces
+  // tool use and wraps up before the limit instead of being killed mid-thought.
+  const maxTurns = numOpt(cfg, "REBUILD_MAX_TURNS", "maxTurns")
+  const maxBudgetUsd = numOpt(cfg, "REBUILD_MAX_BUDGET_USD", "maxBudgetUsd")
+  const taskBudgetTokens = numOpt(cfg, "REBUILD_TASK_BUDGET_TOKENS", "taskBudgetTokens")
   return {
     cwd: workDir,
     permissionMode: "bypassPermissions",
+    ...(maxTurns ? { maxTurns } : {}),
+    ...(maxBudgetUsd ? { maxBudgetUsd } : {}),
+    ...(taskBudgetTokens ? { taskBudget: { total: taskBudgetTokens } } : {}),
     // Claude model for the agent engine, set platform-wide by a SUPER_ADMIN
     // (server `cli_model`). Omitted → Claude Code's default.
     ...(cfg.cliModel ? { model: cfg.cliModel } : {}),
@@ -530,20 +549,163 @@ async function reportCliUsage(opts, result) {
   }
 }
 
+// --- Session-limit auto-resume (claude.ai subscription) ---------------------
+// On a personal `claude login`, the Agent SDK emits a `rate_limit_event` whose
+// `rate_limit_info.status` becomes 'rejected' when the 5h/7d limit is hit (the
+// Claude Code subprocess prints "You've hit your session limit · resets …").
+// Rather than crash the run, we capture `resetsAt`, stay alive with a live
+// countdown — Ctrl+Q (or q) aborts — then RESUME the same session and continue.
+const RESUME_PROMPT =
+  "You were interrupted by a usage limit, now reset. Continue exactly where you left off and keep going through the remaining work — do not restart from scratch."
+
+// resetsAt can be epoch seconds or ms; normalise to ms (0 if absent).
+function resetsAtMs(info) {
+  const v = Number(info?.resetsAt ?? info?.overageResetsAt ?? 0)
+  if (!v) return 0
+  return v < 1e12 ? v * 1000 : v
+}
+
+// Fallback when no resetsAt: parse "resets 3:50pm" / "resets 15:50" from text to
+// a future epoch-ms (rolls to tomorrow if that clock time already passed). 0 if none.
+function parseResetClock(text) {
+  const m = /resets?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i.exec(String(text || ""))
+  if (!m) return 0
+  let h = Number(m[1])
+  const min = Number(m[2] || 0)
+  const ap = (m[3] || "").toLowerCase()
+  if (ap === "pm" && h < 12) h += 12
+  if (ap === "am" && h === 12) h = 0
+  const d = new Date()
+  d.setHours(h, min, 0, 0)
+  if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1)
+  return d.getTime()
+}
+
+function fmtDur(ms) {
+  const s = Math.max(0, Math.round(ms / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const ss = s % 60
+  if (h) return `${h}h${String(m).padStart(2, "0")}`
+  if (m) return `${m}m${String(ss).padStart(2, "0")}s`
+  return `${ss}s`
+}
+
+// Block until `whenMs`, showing a countdown. Resolves true when the wait finishes,
+// false if the user pressed Ctrl+Q / q. Ctrl+C still hard-exits.
+function waitForReset(whenMs, label) {
+  const stdin = process.stdin
+  const at = new Date(whenMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  console.log(
+    `\n${c.yellow("⏸ Session limit reached")}${label ? c.dim(` (${label})`) : ""} — resumes around ${c.bold(at)}. ` +
+      c.dim("Staying alive — press Ctrl+Q to quit.")
+  )
+  const canRaw = stdin.isTTY && typeof stdin.setRawMode === "function"
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (ok) => {
+      if (done) return
+      done = true
+      clearInterval(timer)
+      if (canRaw) {
+        try {
+          stdin.setRawMode(false)
+        } catch {
+          /* ignore */
+        }
+        stdin.pause()
+        stdin.removeListener("data", onData)
+      }
+      process.stdout.write("\n")
+      resolve(ok)
+    }
+    const onData = (ch) => {
+      const s = ch.toString("utf8")
+      if (ch[0] === 0x11 || s === "q" || s === "Q") finish(false) // Ctrl+Q or q
+      else if (ch[0] === 0x03) process.exit(130) // Ctrl+C
+    }
+    if (canRaw) {
+      try {
+        stdin.setRawMode(true)
+      } catch {
+        /* ignore */
+      }
+      stdin.resume()
+      stdin.on("data", onData)
+    }
+    const render = () => {
+      const remain = whenMs - Date.now()
+      if (remain <= 0) return finish(true)
+      process.stdout.write(`\r${c.yellow("⏳")} resuming in ${c.bold(fmtDur(remain))} ${c.dim("· Ctrl+Q to quit")}   `)
+    }
+    const timer = setInterval(render, 1000)
+    render()
+  })
+}
+
+// Stream an agent run to stdout; return the session id (for resuming the chat).
+// If `opts.resumeWith(sessionId)` is given and a session limit is hit, it waits
+// out the reset and resumes the same session instead of letting the run die.
 async function streamAgent(run, opts = {}) {
   let sessionId = null
-  for await (const msg of run) {
-    if (msg.session_id) sessionId = msg.session_id
-    if (msg.type === "assistant") {
-      for (const block of msg.message?.content ?? []) {
-        if (block.type === "text") process.stdout.write(block.text)
-        else if (block.type === "tool_use") process.stdout.write(c.dim(`\n· ${block.name}\n`))
+  let current = run
+  for (;;) {
+    let blockedUntil = 0 // >0 once a 'rejected' rate-limit is seen this pass
+    let blockedLabel = ""
+    try {
+      for await (const msg of current) {
+        if (msg.session_id) sessionId = msg.session_id
+        if (msg.type === "rate_limit_event") {
+          const info = msg.rate_limit_info || {}
+          if (info.status === "rejected") {
+            // No resetsAt → default to a short 5-minute backoff.
+            blockedUntil = resetsAtMs(info) || blockedUntil || Date.now() + 5 * 60_000
+            blockedLabel = info.rateLimitType || ""
+          } else if (info.status === "allowed") {
+            blockedUntil = 0 // recovered within the same stream
+          }
+          continue
+        }
+        if (msg.type === "assistant") {
+          for (const block of msg.message?.content ?? []) {
+            if (block.type === "text") process.stdout.write(block.text)
+            else if (block.type === "tool_use") process.stdout.write(c.dim(`\n· ${block.name}\n`))
+          }
+        } else if (msg.type === "result") {
+          if (opts.cfg) await reportCliUsage(opts, msg)
+          // F4 — a guard-rail (budget / step cap) stopped the run cleanly. Tell
+          // the user how to lift it instead of looking like a silent halt.
+          if (msg.subtype === "error_max_budget_usd" || msg.subtype === "error_max_turns") {
+            const cost = typeof msg.total_cost_usd === "number" ? ` ($${msg.total_cost_usd.toFixed(2)})` : ""
+            const why = msg.subtype === "error_max_budget_usd" ? "budget" : "step (turn) limit"
+            console.log(
+              c.yellow(`\n⛔ Agent stopped at its ${why}${cost}.`) +
+                c.dim(" Raise REBUILD_MAX_BUDGET_USD / REBUILD_MAX_TURNS (or run /run again to continue).")
+            )
+          }
+          // A hard usage limit can also surface as an error result whose text mentions it.
+          if (msg.is_error && !blockedUntil) {
+            const at = parseResetClock(msg.result || (msg.errors || []).join(" "))
+            if (at) blockedUntil = at
+          }
+        }
       }
-    } else if (msg.type === "result" && opts.cfg) {
-      await reportCliUsage(opts, msg)
+    } catch (err) {
+      // The SDK may throw on a hard limit; recover only if we can find a reset time.
+      const at = blockedUntil || parseResetClock(err?.message || String(err))
+      if (!(at && opts.resumeWith)) throw err
+      blockedUntil = at
     }
+
+    if (blockedUntil && opts.resumeWith) {
+      const ok = await waitForReset(blockedUntil, blockedLabel)
+      if (!ok) return sessionId // user pressed Ctrl+Q → stop, keep the session id
+      console.log(c.cyan("▶ Resuming…\n"))
+      current = opts.resumeWith(sessionId)
+      continue
+    }
+    return sessionId
   }
-  return sessionId
 }
 
 // Fetch context, clone the repo into a visible folder, cd into it, block push,
@@ -666,7 +828,14 @@ async function cmdRun(project, forceMode) {
     console.log(c.cyan("\n▶ Launching Claude Code (autonomous)…\n"))
     sessionId = await streamAgent(
       query({ prompt: deliveryTask(ctx), options: agentOptions(workDir, cfg, project) }),
-      { cfg, feature: "cli-delivery", projectId: ctx.project?.id, workspaceId: ctx.workspace?.id }
+      {
+        cfg,
+        feature: "cli-delivery",
+        projectId: ctx.project?.id,
+        workspaceId: ctx.workspace?.id,
+        resumeWith: (rsid) =>
+          query({ prompt: RESUME_PROMPT, options: agentOptions(workDir, cfg, project, rsid) }),
+      }
     )
     console.log(c.green("\n\n✓ Agent finished the autonomous pass."))
   }
@@ -729,7 +898,7 @@ async function session({ workDir, repo, ctx, cfg, project, query, sessionId, pri
         console.log(c.green("All tickets are DONE — nothing to run."))
       } else {
         console.log(c.cyan(`\n▶ Autonomous pass over ${todo.length} open ticket(s)…\n`))
-        sid = (await streamAgent(query({ prompt: deliveryTask(ctx), options: agentOptions(workDir, cfg, project, sid) }), { cfg, feature: "cli-delivery", projectId: ctx.project?.id, workspaceId: ctx.workspace?.id })) || sid
+        sid = (await streamAgent(query({ prompt: deliveryTask(ctx), options: agentOptions(workDir, cfg, project, sid) }), { cfg, feature: "cli-delivery", projectId: ctx.project?.id, workspaceId: ctx.workspace?.id, resumeWith: (rsid) => query({ prompt: RESUME_PROMPT, options: agentOptions(workDir, cfg, project, rsid) }) })) || sid
         isPrimed = true
         console.log(c.green("\n\n✓ Pass finished."))
       }
@@ -740,7 +909,7 @@ async function session({ workDir, repo, ctx, cfg, project, query, sessionId, pri
       const prompt = isPrimed ? cmd : `${chatPreamble(ctx)}\n\nUser: ${cmd}`
       isPrimed = true
       process.stdout.write(c.cyan("\nclaude> "))
-      sid = (await streamAgent(query({ prompt, options: agentOptions(workDir, cfg, project, sid) }), { cfg, feature: "cli-chat", projectId: ctx.project?.id, workspaceId: ctx.workspace?.id })) || sid
+      sid = (await streamAgent(query({ prompt, options: agentOptions(workDir, cfg, project, sid) }), { cfg, feature: "cli-chat", projectId: ctx.project?.id, workspaceId: ctx.workspace?.id, resumeWith: (rsid) => query({ prompt: RESUME_PROMPT, options: agentOptions(workDir, cfg, project, rsid) }) })) || sid
       process.stdout.write("\n")
     }
     rl.prompt()

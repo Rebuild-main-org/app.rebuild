@@ -57,7 +57,7 @@ function GateBadge({ on }: { on: boolean | undefined }) {
     </Badge>
   ) : (
     <Badge variant="outline" className="text-muted-foreground gap-1">
-      <CircleDashed className="size-3" /> en attente
+      <CircleDashed className="size-3" /> pending
     </Badge>
   )
 }
@@ -95,7 +95,7 @@ export function BlueprintPipeline({
   async function importMd(file: File) {
     const text = await file.text()
     if (!text.trim()) {
-      toast.error("Fichier vide")
+      toast.error("Empty file")
       return
     }
     setBusy("import")
@@ -104,12 +104,12 @@ export function BlueprintPipeline({
       setWizardForm(data.form as SpecForm)
       setWizardKey((k) => k + 1)
       setIntakeMode("wizard")
-      toast.success(`Assistant pré-rempli depuis ${file.name}`)
+      toast.success(`Assistant pre-filled from ${file.name}`)
     } catch (e) {
       setSpec(text)
       setIntakeMode("yaml")
-      await savePatch({ specYaml: text }, `Importé (brut) depuis ${file.name}`)
-      toast.message(e instanceof Error ? e.message : "Extraction IA indisponible — doc mis dans l'éditeur YAML")
+      await savePatch({ specYaml: text }, `Imported (raw) from ${file.name}`)
+      toast.message(e instanceof Error ? e.message : "AI extraction unavailable — doc placed in the YAML editor")
     } finally {
       setBusy(null)
     }
@@ -125,14 +125,14 @@ export function BlueprintPipeline({
     return data
   }
 
-  async function savePatch(patch: Record<string, unknown>, label = "Enregistré") {
+  async function savePatch(patch: Record<string, unknown>, label = "Saved") {
     setBusy("save")
     try {
       const updated = await api("", { method: "PATCH", body: JSON.stringify(patch) })
       setBp(updated)
       toast.success(label)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Échec")
+      toast.error(e instanceof Error ? e.message : "Failed")
     } finally {
       setBusy(null)
     }
@@ -147,9 +147,9 @@ export function BlueprintPipeline({
       setValidation({ ok: v.ok, missing: v.missing, present: v.present })
       if (v.blueprint) setBp(v.blueprint) // reflect the persisted gate exactly
       else setBp((b) => ({ ...b, specYaml: spec, gates: { ...b.gates, validate: v.ok } }))
-      toast[v.ok ? "success" : "error"](v.ok ? "Spec complète" : `${v.missing.length} section(s) manquante(s)`)
+      toast[v.ok ? "success" : "error"](v.ok ? "Spec complete" : `${v.missing.length} section(s) missing`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Échec")
+      toast.error(e instanceof Error ? e.message : "Failed")
     } finally {
       setBusy(null)
     }
@@ -175,7 +175,7 @@ export function BlueprintPipeline({
         pass ? `Gate OK — score ${result.spec_quality_score}%` : `Score ${result.spec_quality_score}% (< ${CRITIQUE_PASS_SCORE}%)`
       )
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Échec")
+      toast.error(e instanceof Error ? e.message : "Failed")
     } finally {
       setBusy(null)
     }
@@ -188,9 +188,9 @@ export function BlueprintPipeline({
       const { revision } = await api("/propose", { method: "POST" })
       setProposal(revision as SpecRevision)
       setProposedSpec((revision as SpecRevision).revised_spec)
-      toast.success("Corrections proposées — relis, modifie, puis approuve")
+      toast.success("Proposed fixes — review, edit, then approve")
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Échec")
+      toast.error(e instanceof Error ? e.message : "Failed")
     } finally {
       setBusy(null)
     }
@@ -201,7 +201,7 @@ export function BlueprintPipeline({
     setIntakeMode("yaml")
     setProposal(null)
     // Replacing the spec re-arms the validate/critique gates (server-side).
-    await savePatch({ specYaml: proposedSpec }, "Spec corrigée approuvée")
+    await savePatch({ specYaml: proposedSpec }, "Corrected spec approved")
   }
 
   async function runPlan() {
@@ -209,9 +209,9 @@ export function BlueprintPipeline({
     try {
       const { plan } = await api("/plan", { method: "POST" })
       setBp((b) => ({ ...b, plan, gates: { ...b.gates, plan: (plan?.projects?.length ?? 0) > 0 } }))
-      toast.success(`Plan généré — ${plan?.projects?.length ?? 0} projet(s)`)
+      toast.success(`Plan generated — ${plan?.projects?.length ?? 0} project(s)`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Échec")
+      toast.error(e instanceof Error ? e.message : "Failed")
     } finally {
       setBusy(null)
     }
@@ -222,13 +222,13 @@ export function BlueprintPipeline({
       const updated = await api("/gate", { method: "POST", body: JSON.stringify({ gate, passed }) })
       setBp(updated)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Échec")
+      toast.error(e instanceof Error ? e.message : "Failed")
     }
   }
 
   async function setPrereq(key: string, checked: boolean) {
     const prereqs = { ...bp.prereqs, [key]: checked }
-    await savePatch({ prereqs }, "Pré-requis mis à jour")
+    await savePatch({ prereqs }, "Prerequisites updated")
   }
 
   async function approve() {
@@ -236,36 +236,36 @@ export function BlueprintPipeline({
     try {
       const updated = await api("/approve", { method: "POST" })
       setBp(updated)
-      toast.success("Blueprint approuvé ✅")
+      toast.success("Blueprint approved ✅")
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Gates incomplets")
+      toast.error(e instanceof Error ? e.message : "Incomplete gates")
     } finally {
       setBusy(null)
     }
   }
 
   async function deleteBlueprint() {
-    if (!confirm(`Supprimer définitivement le blueprint « ${bp.title} » ?`)) return
+    if (!confirm(`Permanently delete the blueprint « ${bp.title} »?`)) return
     setBusy("delete")
     try {
       await api("", { method: "DELETE" })
-      toast.success("Blueprint supprimé")
+      toast.success("Blueprint deleted")
       router.push("/blueprints")
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Suppression échouée")
+      toast.error(e instanceof Error ? e.message : "Deletion failed")
       setBusy(null)
     }
   }
 
   async function convert() {
-    if (!confirm("Créer le workspace depuis ce Blueprint approuvé ?")) return
+    if (!confirm("Create the workspace from this approved Blueprint?")) return
     setBusy("convert")
     try {
       const res = await api("/convert", { method: "POST" })
-      toast.success(`Workspace créé — ${res.projects} projet(s), ${res.tickets} ticket(s)`)
+      toast.success(`Workspace created — ${res.projects} project(s), ${res.tickets} ticket(s)`)
       router.push(`/workspace/${res.workspace.id}/overview`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Échec de la conversion")
+      toast.error(e instanceof Error ? e.message : "Conversion failed")
     } finally {
       setBusy(null)
     }
@@ -291,13 +291,13 @@ export function BlueprintPipeline({
                 className="text-muted-foreground hover:text-destructive gap-1.5"
               >
                 {busy === "delete" ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-                Supprimer
+                Delete
               </Button>
             )}
           </div>
         </div>
         <p className="text-muted-foreground text-sm">
-          Phase A — Conception · gates {greenCount}/{ALL_GATES.length}
+          Phase A — Design · gates {greenCount}/{ALL_GATES.length}
         </p>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {BLUEPRINT_STEPS.map((s, i) => {
@@ -320,10 +320,10 @@ export function BlueprintPipeline({
       {readOnly && (
         <Card className="border-blue-500/40">
           <CardContent className="flex items-center justify-between gap-3 p-4 text-sm">
-            <span>Ce Blueprint a été converti en workspace.</span>
+            <span>This Blueprint was converted into a workspace.</span>
             {bp.workspaceId && (
               <Button size="sm" onClick={() => router.push(`/workspace/${bp.workspaceId}/overview`)}>
-                Ouvrir le workspace <ArrowRight className="size-4" />
+                Open the workspace <ArrowRight className="size-4" />
               </Button>
             )}
           </CardContent>
@@ -338,13 +338,13 @@ export function BlueprintPipeline({
             {!readOnly && (
               <div className="flex flex-wrap gap-1">
                 <Button variant={intakeMode === "wizard" ? "default" : "outline"} size="sm" onClick={() => setIntakeMode("wizard")}>
-                  Assistant guidé
+                  Guided assistant
                 </Button>
                 <Button variant={intakeMode === "yaml" ? "default" : "outline"} size="sm" onClick={() => setIntakeMode("yaml")}>
-                  Éditeur YAML
+                  YAML editor
                 </Button>
                 <Button variant="outline" size="sm" className="gap-1.5" disabled={busy === "import"} onClick={() => mdInputRef.current?.click()}>
-                  {busy === "import" ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4" />} Importer .md
+                  {busy === "import" ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4" />} Import .md
                 </Button>
                 <input
                   ref={mdInputRef}
@@ -360,7 +360,7 @@ export function BlueprintPipeline({
               </div>
             )}
           </div>
-          <CardDescription>L&apos;artefact source de toute la Phase A.</CardDescription>
+          <CardDescription>The source artifact for all of Phase A.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {intakeMode === "wizard" && !readOnly ? (
@@ -373,7 +373,7 @@ export function BlueprintPipeline({
               onSpec={(yaml) => {
                 setSpec(yaml)
                 setIntakeMode("yaml")
-                savePatch({ specYaml: yaml }, "Spec générée et enregistrée")
+                savePatch({ specYaml: yaml }, "Spec generated and saved")
               }}
             />
           ) : (
@@ -387,8 +387,8 @@ export function BlueprintPipeline({
                 className="font-mono text-xs"
               />
               {!readOnly && (
-                <Button variant="outline" size="sm" onClick={() => savePatch({ specYaml: spec }, "Spec enregistrée")} disabled={busy === "save"}>
-                  {busy === "save" ? <Loader2 className="size-4 animate-spin" /> : null} Enregistrer la spec
+                <Button variant="outline" size="sm" onClick={() => savePatch({ specYaml: spec }, "Spec saved")} disabled={busy === "save"}>
+                  {busy === "save" ? <Loader2 className="size-4 animate-spin" /> : null} Save the spec
                 </Button>
               )}
             </>
@@ -400,23 +400,23 @@ export function BlueprintPipeline({
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">2 · Validation de spec</CardTitle>
+            <CardTitle className="text-base">2 · Spec validation</CardTitle>
             <GateBadge on={bp.gates.validate} />
           </div>
-          <CardDescription>Gate dur : NFR, patterns d&apos;accès et modes de défaillance présents.</CardDescription>
+          <CardDescription>Hard gate: NFR, access patterns and failure modes present.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Button onClick={runValidate} disabled={readOnly || busy === "validate"} className="gap-2">
             {busy === "validate" ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
-            Valider la complétude
+            Validate completeness
           </Button>
           {validation && (
             <div className="text-sm">
               {validation.missing.length === 0 ? (
-                <p className="text-emerald-600 dark:text-emerald-400">Toutes les sections requises sont présentes.</p>
+                <p className="text-emerald-600 dark:text-emerald-400">All required sections are present.</p>
               ) : (
                 <div className="space-y-1">
-                  <p className="text-red-600 dark:text-red-400">Sections manquantes :</p>
+                  <p className="text-red-600 dark:text-red-400">Missing sections:</p>
                   <ul className="ml-4 list-disc">
                     {validation.missing.map((m) => (
                       <li key={m}>{m}</li>
@@ -433,15 +433,15 @@ export function BlueprintPipeline({
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">3 · Critique de spec (IA)</CardTitle>
+            <CardTitle className="text-base">3 · Spec critique (AI)</CardTitle>
             <GateBadge on={bp.gates.critique} />
           </div>
-          <CardDescription>Gate : score de qualité ≥ {CRITIQUE_PASS_SCORE}% (la résolution des BLOCKER reste recommandée).</CardDescription>
+          <CardDescription>Gate: quality score ≥ {CRITIQUE_PASS_SCORE}% (resolving BLOCKERs is still recommended).</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Button onClick={runCritique} disabled={readOnly || busy === "critique"} className="gap-2">
             {busy === "critique" ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-            Lancer la critique
+            Run the critique
           </Button>
 
           {bp.critique && (
@@ -475,7 +475,7 @@ export function BlueprintPipeline({
 
               {bp.critique.open_questions.length > 0 && (
                 <div className="space-y-1 text-sm">
-                  <p className="font-medium">Questions ouvertes :</p>
+                  <p className="font-medium">Open questions:</p>
                   {bp.critique.open_questions.map((q) => (
                     <div key={q.id} className="rounded-md border p-2">
                       <span className="flex items-center gap-2">
@@ -483,7 +483,7 @@ export function BlueprintPipeline({
                         {q.question}
                       </span>
                       {q.proposed_default && (
-                        <span className="text-muted-foreground block text-xs">défaut proposé : {q.proposed_default}</span>
+                        <span className="text-muted-foreground block text-xs">proposed default: {q.proposed_default}</span>
                       )}
                     </div>
                   ))}
@@ -491,20 +491,20 @@ export function BlueprintPipeline({
               )}
 
               {bp.critique.next_action && (
-                <p className="text-muted-foreground text-sm">Prochaine action : {bp.critique.next_action}</p>
+                <p className="text-muted-foreground text-sm">Next action: {bp.critique.next_action}</p>
               )}
             </div>
           )}
 
           <Separator />
           <div className="space-y-2">
-            <label className="text-sm font-medium">Réponses / résolutions humaines</label>
+            <label className="text-sm font-medium">Answers / human resolutions</label>
             <Textarea
               value={answers}
               onChange={(e) => setAnswers(e.target.value)}
               disabled={readOnly}
               rows={4}
-              placeholder="Réponds aux questions bloquantes (Q-001: ...), puis relance la critique."
+              placeholder="Answer the blocking questions (Q-001: ...), then re-run the critique."
               className="text-sm"
             />
           </div>
@@ -515,12 +515,12 @@ export function BlueprintPipeline({
               <Separator />
               <Button onClick={runPropose} disabled={busy === "propose"} variant="outline" className="gap-2">
                 {busy === "propose" ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
-                Proposer des corrections (IA)
+                Propose fixes (AI)
               </Button>
 
               {proposal && (
                 <div className="space-y-2 rounded-md border p-3">
-                  <p className="text-sm font-medium">Changements proposés ({proposal.changes.length})</p>
+                  <p className="text-sm font-medium">Proposed changes ({proposal.changes.length})</p>
                   {proposal.changes.length > 0 && (
                     <ul className="ml-4 list-disc space-y-0.5 text-sm">
                       {proposal.changes.map((c, i) => (
@@ -532,7 +532,7 @@ export function BlueprintPipeline({
                     </ul>
                   )}
                   {proposal.notes && <p className="text-muted-foreground text-xs">{proposal.notes}</p>}
-                  <label className="text-sm font-medium">Spec proposée (modifiable avant d&apos;approuver)</label>
+                  <label className="text-sm font-medium">Proposed spec (editable before approving)</label>
                   <Textarea
                     value={proposedSpec}
                     onChange={(e) => setProposedSpec(e.target.value)}
@@ -541,10 +541,10 @@ export function BlueprintPipeline({
                   />
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" onClick={approveProposal} disabled={busy === "save"} className="gap-1.5">
-                      <Check className="size-4" /> Approuver & remplacer la spec
+                      <Check className="size-4" /> Approve & replace the spec
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => setProposal(null)}>
-                      Annuler
+                      Cancel
                     </Button>
                   </div>
                 </div>
@@ -557,11 +557,11 @@ export function BlueprintPipeline({
       {/* 4-6. Manual artifact gates */}
       <ManualGate
         n={4}
-        title="Faisabilité & sizing"
-        desc="Estimation, registre de risques ; relié au devis CRM. Gate : faisable dans le budget/délai."
+        title="Feasibility & sizing"
+        desc="Estimation, risk register; linked to the CRM quote. Gate: feasible within budget/timeline."
         value={feasibility}
         onChange={setFeasibility}
-        onSave={() => savePatch({ feasibility }, "Faisabilité enregistrée")}
+        onSave={() => savePatch({ feasibility }, "Feasibility saved")}
         gate="feasibility"
         on={bp.gates.feasibility}
         onToggle={toggleGate}
@@ -570,11 +570,11 @@ export function BlueprintPipeline({
       />
       <ManualGate
         n={5}
-        title="Conception de solution"
-        desc="Stack approuvée, bounded contexts, modèle de données + index, intégrations/pannes, cache/async, SLO → SDD + ADRs + openapi.yaml + schéma DB."
+        title="Solution design"
+        desc="Approved stack, bounded contexts, data model + indexes, integrations/failures, cache/async, SLO → SDD + ADRs + openapi.yaml + DB schema."
         value={designDoc}
         onChange={setDesignDoc}
-        onSave={() => savePatch({ designDoc }, "Design enregistré")}
+        onSave={() => savePatch({ designDoc }, "Design saved")}
         gate="design"
         on={bp.gates.design}
         onToggle={toggleGate}
@@ -584,10 +584,10 @@ export function BlueprintPipeline({
       <ManualGate
         n={6}
         title="Budgets & acceptance"
-        desc="NFR → acceptance.yaml / QUALITY.md + budgets de latence + config des gates CI. Gate : seuils gelés."
+        desc="NFR → acceptance.yaml / QUALITY.md + latency budgets + CI gates config. Gate: thresholds frozen."
         value={acceptanceYaml}
         onChange={setAcceptanceYaml}
-        onSave={() => savePatch({ acceptanceYaml }, "Acceptance enregistrée")}
+        onSave={() => savePatch({ acceptanceYaml }, "Acceptance saved")}
         gate="budgets"
         on={bp.gates.budgets}
         onToggle={toggleGate}
@@ -600,10 +600,10 @@ export function BlueprintPipeline({
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">7 · Pré-requis & provisioning</CardTitle>
+            <CardTitle className="text-base">7 · Prerequisites & provisioning</CardTitle>
             <GateBadge on={bp.gates.prereqs} />
           </div>
-          <CardDescription>Gate : checklist verte.</CardDescription>
+          <CardDescription>Gate: checklist green.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {PREREQ_ITEMS.map((item) => (
@@ -623,15 +623,15 @@ export function BlueprintPipeline({
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">8 · Plan & approbation</CardTitle>
+            <CardTitle className="text-base">8 · Plan & approval</CardTitle>
             <GateBadge on={bp.gates.plan} />
           </div>
-          <CardDescription>planFromArchitecture en preview — projets + backlog, sans rien créer.</CardDescription>
+          <CardDescription>planFromArchitecture in preview — projects + backlog, without creating anything.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Button onClick={runPlan} disabled={readOnly || busy === "plan"} className="gap-2">
             {busy === "plan" ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-            Générer le plan (preview)
+            Generate the plan (preview)
           </Button>
           {bp.plan?.projects?.length ? (
             <div className="space-y-2">
@@ -659,15 +659,15 @@ export function BlueprintPipeline({
       {/* Approve + Convert */}
       <Card className="border-primary/30">
         <CardHeader>
-          <CardTitle className="text-base">Approbation & création du workspace</CardTitle>
+          <CardTitle className="text-base">Approval & workspace creation</CardTitle>
           <CardDescription>
-            La création du workspace n&apos;est possible que depuis un Blueprint approuvé (toutes les gates vertes).
+            Workspace creation is only possible from an approved Blueprint (all gates green).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {pending.length > 0 && bp.status !== "CONVERTED" && (
             <p className="text-muted-foreground text-sm">
-              Gates en attente : {pending.join(", ")}
+              Pending gates: {pending.join(", ")}
             </p>
           )}
           <div className="flex flex-wrap gap-2">
@@ -677,7 +677,7 @@ export function BlueprintPipeline({
               className="gap-2"
             >
               {busy === "approve" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              {bp.status === "APPROVED" ? "Approuvé" : "Approuver le Blueprint"}
+              {bp.status === "APPROVED" ? "Approved" : "Approve the Blueprint"}
             </Button>
             <Button
               onClick={convert}
@@ -686,12 +686,12 @@ export function BlueprintPipeline({
               className="gap-2"
             >
               {busy === "convert" ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
-              Créer le workspace
+              Create the workspace
             </Button>
           </div>
           {!canCreateWorkspace && (
             <p className="text-muted-foreground text-xs">
-              (La création de workspace requiert le droit <code>workspace.create</code>.)
+              (Workspace creation requires the <code>workspace.create</code> permission.)
             </p>
           )}
         </CardContent>
@@ -749,12 +749,12 @@ function ManualGate({
         <div className="flex flex-wrap items-center gap-3">
           {!readOnly && (
             <Button variant="outline" size="sm" onClick={onSave} disabled={saving}>
-              Enregistrer
+              Save
             </Button>
           )}
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={!!on} disabled={readOnly} onCheckedChange={(c) => onToggle(gate, c === true)} />
-            Gate validée
+            Gate passed
           </label>
         </div>
       </CardContent>

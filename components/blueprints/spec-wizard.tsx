@@ -34,7 +34,7 @@ function seedForm(f?: SpecForm): Form {
   }
 }
 
-// Curated chip options per group (each group also accepts free « Autre… » values).
+// Curated chip options per group (each group also accepts free « Other… » values).
 const LANG_OPTIONS = [
   "TypeScript", "JavaScript", "Node.js", "Next.js", "React", "Vue", "Nuxt", "SvelteKit",
   "Angular", "Astro", "Remix", "SolidJS", "NestJS", "Python/FastAPI", "Django", "Go",
@@ -51,14 +51,14 @@ const MCP_OPTIONS = [
 
 const COMPLIANCE_OPTIONS = ["GDPR", "PCI-DSS", "HIPAA", "SOC2"]
 const STEPS = [
-  "Projet",
-  "Cas d'usage",
+  "Project",
+  "Use cases",
   "NFR",
-  "Données & accès",
-  "Intégrations & stack",
-  "Gates de qualité",
+  "Data & access",
+  "Integrations & stack",
+  "Quality gates",
   "Documents",
-  "Récapitulatif",
+  "Summary",
 ]
 
 const Q = (s: string) => JSON.stringify(s || "") // YAML-safe scalar
@@ -140,19 +140,19 @@ function buildSpecYaml(f: Form, figmaUrl: string, docNames: string[]): string {
 // Step-8 completeness gate (form-side validation 2).
 function missingFields(f: Form): string[] {
   const m: string[] = []
-  if (!f.name.trim()) m.push("Nom du projet")
-  if (!f.summary.trim()) m.push("Résumé")
-  if (f.languages.length === 0) m.push("Langages / frameworks (≥ 1)")
-  if (!f.useCases.some((u) => u.name && u.acceptance)) m.push("≥ 1 cas d'usage avec critère d'acceptation")
-  if (!f.scale.trim()) m.push("Échelle / volumétrie")
-  if (!f.availabilitySlo.trim()) m.push("SLO de disponibilité")
-  if (!f.latencyPaths.some((p) => p.path && p.p99)) m.push("≥ 1 budget de latence (chemin + p99)")
-  if (!f.consistency.some((c) => c.domain)) m.push("≥ 1 domaine de consistance")
-  if (!f.entities.some((e) => e.name && e.accessPatterns)) m.push("≥ 1 entité avec patterns d'accès")
-  if (!f.integrations.some((i) => i.name && i.onFailure)) m.push("≥ 1 intégration avec on_failure")
-  if (!f.coverageTarget.trim() && !f.qualityGates.trim()) m.push("Gates de qualité (couverture ou liste)")
+  if (!f.name.trim()) m.push("Project name")
+  if (!f.summary.trim()) m.push("Summary")
+  if (f.languages.length === 0) m.push("Languages / frameworks (≥ 1)")
+  if (!f.useCases.some((u) => u.name && u.acceptance)) m.push("≥ 1 use case with acceptance criteria")
+  if (!f.scale.trim()) m.push("Scale / volume")
+  if (!f.availabilitySlo.trim()) m.push("Availability SLO")
+  if (!f.latencyPaths.some((p) => p.path && p.p99)) m.push("≥ 1 latency budget (path + p99)")
+  if (!f.consistency.some((c) => c.domain)) m.push("≥ 1 consistency domain")
+  if (!f.entities.some((e) => e.name && e.accessPatterns)) m.push("≥ 1 entity with access patterns")
+  if (!f.integrations.some((i) => i.name && i.onFailure)) m.push("≥ 1 integration with on_failure")
+  if (!f.coverageTarget.trim() && !f.qualityGates.trim()) m.push("Quality gates (coverage or list)")
   if (f.entities.some((e) => e.pii) && !f.compliance.includes("GDPR"))
-    m.push("PII présent → GDPR requis dans la conformité")
+    m.push("PII present → GDPR required in compliance")
   return m
 }
 
@@ -186,9 +186,9 @@ export function SpecWizard({
     const res = await fetch(`/api/blueprints/${blueprintId}/documents`, { method: "POST", body: fd })
     setUploading(false)
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) return toast.error(data.error ?? "Upload échoué")
+    if (!res.ok) return toast.error(data.error ?? "Upload failed")
     setDocs(data.documents)
-    toast.success("Fichier ajouté")
+    toast.success("File added")
   }
   async function removeDoc(docId: string) {
     const res = await fetch(`/api/blueprints/${blueprintId}/documents?docId=${docId}`, { method: "DELETE" })
@@ -225,13 +225,13 @@ export function SpecWizard({
       <div className="min-h-[16rem] rounded-lg border p-4">
         {step === 0 && (
           <div className="space-y-3">
-            <Field label="Nom du projet">
+            <Field label="Project name">
               <Input value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Acme Rides" />
             </Field>
-            <Field label="Résumé / objectif">
+            <Field label="Summary / goal">
               <Textarea value={f.summary} onChange={(e) => set("summary", e.target.value)} rows={3} />
             </Field>
-            <Field label="Cible de déploiement">
+            <Field label="Deployment target">
               <Input value={f.deployTarget} onChange={(e) => set("deployTarget", e.target.value)} placeholder="Vercel · AWS · k8s…" />
             </Field>
           </div>
@@ -239,15 +239,15 @@ export function SpecWizard({
 
         {step === 1 && (
           <Repeatable
-            title="Cas d'usage"
+            title="Use cases"
             items={f.useCases}
             onAdd={() => set("useCases", [...f.useCases, { name: "", actor: "", acceptance: "" }])}
             onRemove={(i) => set("useCases", f.useCases.filter((_, x) => x !== i))}
             render={(u, i) => (
               <div className="space-y-2">
-                <Input placeholder="Nom (ex. Demander une course)" value={u.name} onChange={(e) => upd(f, set, "useCases", i, { name: e.target.value })} />
-                <Input placeholder="Acteur (ex. Passager)" value={u.actor} onChange={(e) => upd(f, set, "useCases", i, { actor: e.target.value })} />
-                <Textarea placeholder="Critère d'acceptation mesurable (ex. ETA < 5s, 99% des cas)" value={u.acceptance} rows={2} onChange={(e) => upd(f, set, "useCases", i, { acceptance: e.target.value })} />
+                <Input placeholder="Name (e.g. Request a ride)" value={u.name} onChange={(e) => upd(f, set, "useCases", i, { name: e.target.value })} />
+                <Input placeholder="Actor (e.g. Passenger)" value={u.actor} onChange={(e) => upd(f, set, "useCases", i, { actor: e.target.value })} />
+                <Textarea placeholder="Measurable acceptance criteria (e.g. ETA < 5s, 99% of cases)" value={u.acceptance} rows={2} onChange={(e) => upd(f, set, "useCases", i, { acceptance: e.target.value })} />
               </div>
             )}
           />
@@ -256,13 +256,13 @@ export function SpecWizard({
         {step === 2 && (
           <div className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Échelle / volumétrie"><Input value={f.scale} onChange={(e) => set("scale", e.target.value)} placeholder="5000 rps · 10B lignes" /></Field>
-              <Field label="SLO de disponibilité"><Input value={f.availabilitySlo} onChange={(e) => set("availabilitySlo", e.target.value)} placeholder="99.95%" /></Field>
-              <Field label="Error budget"><Input value={f.errorBudget} onChange={(e) => set("errorBudget", e.target.value)} placeholder="0.05% / mois" /></Field>
-              <Field label="Rétention"><Input value={f.retention} onChange={(e) => set("retention", e.target.value)} placeholder="90 jours" /></Field>
+              <Field label="Scale / volume"><Input value={f.scale} onChange={(e) => set("scale", e.target.value)} placeholder="5000 rps · 10B lignes" /></Field>
+              <Field label="Availability SLO"><Input value={f.availabilitySlo} onChange={(e) => set("availabilitySlo", e.target.value)} placeholder="99.95%" /></Field>
+              <Field label="Error budget"><Input value={f.errorBudget} onChange={(e) => set("errorBudget", e.target.value)} placeholder="0.05% / month" /></Field>
+              <Field label="Retention"><Input value={f.retention} onChange={(e) => set("retention", e.target.value)} placeholder="90 days" /></Field>
             </div>
             <Repeatable
-              title="Budgets de latence (chemins critiques)"
+              title="Latency budgets (critical paths)"
               items={f.latencyPaths}
               onAdd={() => set("latencyPaths", [...f.latencyPaths, { path: "", p99: "" }])}
               onRemove={(i) => set("latencyPaths", f.latencyPaths.filter((_, x) => x !== i))}
@@ -274,13 +274,13 @@ export function SpecWizard({
               )}
             />
             <Repeatable
-              title="Consistance par domaine"
+              title="Consistency by domain"
               items={f.consistency}
               onAdd={() => set("consistency", [...f.consistency, { domain: "", level: "strong" }])}
               onRemove={(i) => set("consistency", f.consistency.filter((_, x) => x !== i))}
               render={(c, i) => (
                 <div className="flex gap-2">
-                  <Input placeholder="Domaine (ex. paiement)" value={c.domain} onChange={(e) => upd(f, set, "consistency", i, { domain: e.target.value })} />
+                  <Input placeholder="Domain (e.g. payment)" value={c.domain} onChange={(e) => upd(f, set, "consistency", i, { domain: e.target.value })} />
                   <select
                     className="border-input bg-background rounded-md border px-2 text-sm"
                     value={c.level}
@@ -292,7 +292,7 @@ export function SpecWizard({
                 </div>
               )}
             />
-            <Field label="Conformité">
+            <Field label="Compliance">
               <div className="flex flex-wrap gap-3">
                 {COMPLIANCE_OPTIONS.map((opt) => (
                   <label key={opt} className="flex items-center gap-1.5 text-sm">
@@ -312,14 +312,14 @@ export function SpecWizard({
 
         {step === 3 && (
           <Repeatable
-            title="Entités & patterns d'accès"
+            title="Entities & access patterns"
             items={f.entities}
             onAdd={() => set("entities", [...f.entities, { name: "", accessPatterns: "", readWriteRatio: "", pii: false }])}
             onRemove={(i) => set("entities", f.entities.filter((_, x) => x !== i))}
             render={(e, i) => (
               <div className="space-y-2">
-                <Input placeholder="Entité (ex. trip)" value={e.name} onChange={(ev) => upd(f, set, "entities", i, { name: ev.target.value })} />
-                <Textarea placeholder="Patterns d'accès (un par ligne, ex. par driver_id où status=ENROUTE)" rows={2} value={e.accessPatterns} onChange={(ev) => upd(f, set, "entities", i, { accessPatterns: ev.target.value })} />
+                <Input placeholder="Entity (e.g. trip)" value={e.name} onChange={(ev) => upd(f, set, "entities", i, { name: ev.target.value })} />
+                <Textarea placeholder="Access patterns (one per line, e.g. by driver_id where status=ENROUTE)" rows={2} value={e.accessPatterns} onChange={(ev) => upd(f, set, "entities", i, { accessPatterns: ev.target.value })} />
                 <div className="flex items-center gap-3">
                   <Input placeholder="read/write ratio (ex. 90/10)" value={e.readWriteRatio} onChange={(ev) => upd(f, set, "entities", i, { readWriteRatio: ev.target.value })} />
                   <label className="flex items-center gap-1.5 text-sm whitespace-nowrap">
@@ -333,21 +333,21 @@ export function SpecWizard({
 
         {step === 4 && (
           <div className="space-y-4">
-            <ChipGroup title="Langages & frameworks web → stack.languages" options={LANG_OPTIONS} selected={f.languages} onChange={(v) => set("languages", v)} />
-            <ChipGroup title="UI / composants → stack.ui" options={UI_OPTIONS} selected={f.ui} onChange={(v) => set("ui", v)} />
+            <ChipGroup title="Languages & web frameworks → stack.languages" options={LANG_OPTIONS} selected={f.languages} onChange={(v) => set("languages", v)} />
+            <ChipGroup title="UI / components → stack.ui" options={UI_OPTIONS} selected={f.ui} onChange={(v) => set("ui", v)} />
             <ChipGroup title="MCP → stack.mcps" options={MCP_OPTIONS} selected={f.mcps} onChange={(v) => set("mcps", v)} />
-            <Field label="Autres (datastore / cache / queue…, libre)">
+            <Field label="Other (datastore / cache / queue…, free)">
               <Input value={f.stack} onChange={(e) => set("stack", e.target.value)} placeholder="Postgres, Redis, SQS, …" />
             </Field>
             <Repeatable
-              title="Intégrations"
+              title="Integrations"
               items={f.integrations}
               onAdd={() => set("integrations", [...f.integrations, { name: "", slaMs: "", onFailure: "" }])}
               onRemove={(i) => set("integrations", f.integrations.filter((_, x) => x !== i))}
               render={(it, i) => (
                 <div className="space-y-2">
                   <div className="flex gap-2">
-                    <Input placeholder="Nom (ex. stripe)" value={it.name} onChange={(e) => upd(f, set, "integrations", i, { name: e.target.value })} />
+                    <Input placeholder="Name (e.g. stripe)" value={it.name} onChange={(e) => upd(f, set, "integrations", i, { name: e.target.value })} />
                     <Input placeholder="sla ms" value={it.slaMs} onChange={(e) => upd(f, set, "integrations", i, { slaMs: e.target.value })} className="w-28" />
                   </div>
                   <Input placeholder="on_failure (timeout/retry/idempotency/fallback/circuit)" value={it.onFailure} onChange={(e) => upd(f, set, "integrations", i, { onFailure: e.target.value })} />
@@ -360,10 +360,10 @@ export function SpecWizard({
         {step === 5 && (
           <div className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Couverture cible"><Input value={f.coverageTarget} onChange={(e) => set("coverageTarget", e.target.value)} placeholder="≥ 80%" /></Field>
-              <Field label="Cible load-test"><Input value={f.loadTestTarget} onChange={(e) => set("loadTestTarget", e.target.value)} placeholder="5000 rps p99 < 200ms" /></Field>
+              <Field label="Coverage target"><Input value={f.coverageTarget} onChange={(e) => set("coverageTarget", e.target.value)} placeholder="≥ 80%" /></Field>
+              <Field label="Load-test target"><Input value={f.loadTestTarget} onChange={(e) => set("loadTestTarget", e.target.value)} placeholder="5000 rps p99 < 200ms" /></Field>
             </div>
-            <Field label="Gates de qualité (une par ligne)">
+            <Field label="Quality gates (one per line)">
               <Textarea value={f.qualityGates} onChange={(e) => set("qualityGates", e.target.value)} rows={4} placeholder={"build\ntypecheck\nlint\nunit\nintegration\ncontract\ne2e\nload\nsecurity"} />
             </Field>
           </div>
@@ -371,13 +371,13 @@ export function SpecWizard({
 
         {step === 6 && (
           <div className="space-y-4">
-            <Field label="Lien Figma">
+            <Field label="Figma link">
               <Input value={figmaUrl} onChange={(e) => setFigmaUrl(e.target.value)} onBlur={saveFigma} placeholder="https://figma.com/file/…" />
             </Field>
-            <Field label="Documents (uploads → bucket Supabase)">
+            <Field label="Documents (uploads → Supabase bucket)">
               <label className="border-input hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm">
                 {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-                Choisir un fichier
+                Choose a file
                 <input
                   type="file"
                   className="hidden"
@@ -410,7 +410,7 @@ export function SpecWizard({
           <div className="space-y-3">
             {missing.length > 0 ? (
               <div className="rounded-md border border-amber-500/40 p-3 text-sm">
-                <p className="text-amber-600 dark:text-amber-400 font-medium">Champs requis manquants :</p>
+                <p className="text-amber-600 dark:text-amber-400 font-medium">Missing required fields:</p>
                 <ul className="ml-4 mt-1 list-disc">
                   {missing.map((m) => (
                     <li key={m}>{m}</li>
@@ -419,13 +419,13 @@ export function SpecWizard({
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-                <Check className="size-4" /> Spec complète — prête pour la critique.
+                <Check className="size-4" /> Spec complete — ready for the critique.
               </div>
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { navigator.clipboard.writeText(yaml); toast.success("Copié") }}>
-                <Copy className="size-4" /> Copier
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { navigator.clipboard.writeText(yaml); toast.success("Copied") }}>
+                <Copy className="size-4" /> Copy
               </Button>
               <Button
                 variant="outline"
@@ -439,10 +439,10 @@ export function SpecWizard({
                   a.click()
                 }}
               >
-                <Download className="size-4" /> Télécharger
+                <Download className="size-4" /> Download
               </Button>
               <Button size="sm" className="gap-1.5" disabled={missing.length > 0} onClick={() => onSpec(yaml)}>
-                <Check className="size-4" /> Utiliser cette spec
+                <Check className="size-4" /> Use this spec
               </Button>
             </div>
 
@@ -454,13 +454,13 @@ export function SpecWizard({
       {/* nav */}
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>
-          Précédent
+          Previous
         </Button>
         <span className="text-muted-foreground text-xs">
-          Étape {step + 1}/{STEPS.length}
+          Step {step + 1}/{STEPS.length}
         </span>
         <Button variant="ghost" size="sm" disabled={step === STEPS.length - 1} onClick={() => setStep((s) => s + 1)}>
-          Suivant
+          Next
         </Button>
       </div>
     </div>
@@ -480,7 +480,7 @@ function upd<K extends keyof Form>(
   set(key, arr as unknown as Form[K])
 }
 
-// Multi-select chips + a free « Autre… » input. Selected values not in `options`
+// Multi-select chips + a free « Other… » input. Selected values not in `options`
 // (custom entries) are rendered as removable chips too.
 function ChipGroup({
   title,
@@ -536,11 +536,11 @@ function ChipGroup({
               addCustom()
             }
           }}
-          placeholder="Autre…"
+          placeholder="Other…"
           className="h-8"
         />
         <Button type="button" variant="outline" size="sm" onClick={addCustom} disabled={!custom.trim()}>
-          <Plus className="size-3.5" /> Ajouter
+          <Plus className="size-3.5" /> Add
         </Button>
       </div>
     </div>
@@ -574,7 +574,7 @@ function Repeatable<T>({
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{title}</span>
         <Button variant="outline" size="sm" className="gap-1" onClick={onAdd}>
-          <Plus className="size-3.5" /> Ajouter
+          <Plus className="size-3.5" /> Add
         </Button>
       </div>
       <div className="space-y-3">
@@ -585,7 +585,7 @@ function Repeatable<T>({
               <button
                 onClick={() => onRemove(i)}
                 className="text-muted-foreground hover:text-destructive absolute right-2 top-2"
-                aria-label="Supprimer"
+                aria-label="Delete"
               >
                 <Trash2 className="size-4" />
               </button>

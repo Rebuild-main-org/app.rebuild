@@ -139,30 +139,30 @@ export default async function DashboardPage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Layers className="size-4" /> REBUILD — progression
+              <Layers className="size-4" /> REBUILD — progress
             </CardTitle>
-            <CardDescription>Clients, projets, niveaux et stack technique.</CardDescription>
+            <CardDescription>Clients, projects, levels and tech stack.</CardDescription>
           </CardHeader>
           <CardContent className="max-h-[28rem] space-y-5 overflow-y-auto">
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-muted/40 rounded-md p-3">
                 <div className="text-2xl font-semibold tabular-nums">{clients}</div>
-                <div className="text-muted-foreground text-xs">Clients (espaces)</div>
+                <div className="text-muted-foreground text-xs">Clients (workspaces)</div>
               </div>
               <div className="bg-muted/40 rounded-md p-3">
                 <div className="text-2xl font-semibold tabular-nums">{totalProjects}</div>
-                <div className="text-muted-foreground text-xs">Projets</div>
+                <div className="text-muted-foreground text-xs">Projects</div>
               </div>
               <div className="bg-muted/40 rounded-md p-3">
                 <div className="text-2xl font-semibold tabular-nums">{avgProgress}%</div>
-                <div className="text-muted-foreground text-xs">Avancement moyen</div>
+                <div className="text-muted-foreground text-xs">Avg. progress</div>
               </div>
             </div>
 
             <div>
-              <div className="text-muted-foreground mb-2 text-xs font-medium uppercase">Projets par niveau</div>
+              <div className="text-muted-foreground mb-2 text-xs font-medium uppercase">Projects by stage</div>
               {byStatus.length === 0 ? (
-                <p className="text-muted-foreground text-sm">Aucun projet pour l&apos;instant.</p>
+                <p className="text-muted-foreground text-sm">No projects yet.</p>
               ) : (
                 <div className="space-y-2">
                   {byStatus.map((s) => (
@@ -184,9 +184,9 @@ export default async function DashboardPage() {
             </div>
 
             <div>
-              <div className="text-muted-foreground mb-2 text-xs font-medium uppercase">Stack technique</div>
+              <div className="text-muted-foreground mb-2 text-xs font-medium uppercase">Tech stack</div>
               {techCounts.length === 0 ? (
-                <p className="text-muted-foreground text-sm">Aucune techno renseignée sur les espaces.</p>
+                <p className="text-muted-foreground text-sm">No technologies set on the workspaces.</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {techCounts.map((tech) => (
