@@ -1316,9 +1316,52 @@ async function cmdOps() {
   console.log(c.bold(`\n✓ Integration ready. Review PR #${pr.number}, then merge ${intBranch} → ${target} once CI is green.`))
 }
 
+// Export the curated AI dataset (feedback ⋈ traced prompt/response) as JSONL.
+// Filters: --feature <name> --workspace <id> --since <ISO> --min-score <-1|0|1>
+// Output: stdout, or --out <file>. Requires login + ai.traces.read (admin).
+async function cmdExportDataset(argv) {
+  const cfg = loadCfg()
+  if (!cfg?.token) {
+    console.error("Not logged in. Run: rebuild216 login")
+    process.exit(1)
+  }
+  const flag = (name) => {
+    const i = argv.indexOf(name)
+    return i >= 0 ? argv[i + 1] : undefined
+  }
+  const params = new URLSearchParams()
+  for (const [k, q] of [
+    ["--feature", "feature"],
+    ["--workspace", "workspace"],
+    ["--since", "since"],
+    ["--min-score", "minScore"],
+  ]) {
+    const v = flag(k)
+    if (v != null) params.set(q, v)
+  }
+  const base = cfg.url || URL_BASE
+  const res = await fetch(`${base}/api/cli/dataset?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${cfg.token}` },
+  })
+  if (!res.ok) {
+    console.error(`Export failed: HTTP ${res.status} — ${(await res.text()).slice(0, 200)}`)
+    process.exit(1)
+  }
+  const jsonl = await res.text()
+  const out = flag("--out")
+  if (out) {
+    fs.writeFileSync(out, jsonl)
+    console.error(`✓ Wrote ${jsonl.split("\n").filter(Boolean).length} rows → ${out}`)
+  } else {
+    process.stdout.write(jsonl)
+  }
+}
+
 const [, , arg, arg2] = process.argv
 if (arg === "-ops" || arg === "--ops" || arg === "ops") {
   await cmdOps()
+} else if (arg === "ai:export-dataset") {
+  await cmdExportDataset(process.argv.slice(3))
 } else if (arg === "--help" || arg === "-h") {
   console.log(
     "Usage:\n" +
@@ -1327,7 +1370,9 @@ if (arg === "-ops" || arg === "--ops" || arg === "ops") {
       "  rebuild216 <project>       (named project, then choose the mode)\n" +
       "  rebuild216 chat [project]  (skip the menu — go straight to chat + MCP)\n" +
       "  rebuild216 -ops            (pick an org repo, integrate ready branches → PR + AI review)\n" +
-      "  rebuild216 key <sk-...>    (use a central Anthropic API key instead of `claude login`; --clear to remove)"
+      "  rebuild216 key <sk-...>    (use a central Anthropic API key instead of `claude login`; --clear to remove)\n" +
+      "  rebuild216 ai:export-dataset [--feature x] [--workspace id] [--since ISO] [--min-score 1] [--out file]\n" +
+      "                             (export the curated AI feedback dataset as JSONL — admin only)"
   )
 } else if (arg === "key") {
   const cfg = loadCfg() || {}

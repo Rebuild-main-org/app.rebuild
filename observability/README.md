@@ -106,3 +106,22 @@ if `METRICS_TOKEN` is set). Grafana is provisioned as code
 (`observability/grafana/`): the **REBUILD — AI Observability** dashboard shows
 cost per feature/workspace, calls/sec, p50/p95 latency, quality score and error
 rate. Langfuse traces stay in Langfuse Cloud (richer per-trace drill-down).
+
+## Curated dataset export (Ticket 4)
+
+Joins human feedback (`ai_feedback`) with the traced prompt/response (Langfuse)
+into JSONL rows `{ feature, promptVersion, input, output, score, note }` — the
+input for later **DSPy** prompt optimization / optional distillation (export
+only; no training here).
+
+```bash
+# admin-only (ai.traces.read); thumbs-up examples for one feature:
+rebuild216 ai:export-dataset --feature review --min-score 1 --out review.jsonl
+#   filters: --feature  --workspace <id>  --since <ISO>  --min-score <-1|0|1>  --out <file>
+```
+
+- CLI command → `GET /api/cli/dataset` (Bearer auth via `userFromBearer`, gated
+  by `can(user, 'ai.traces.read')`), in `lib/observability/dataset.ts`.
+- `input`/`output` come from Langfuse, so meaningful values require Langfuse +
+  `LANGFUSE_CAPTURE_IO=1`. Without it, rows still carry feature/score/note (IO
+  null) — the export degrades gracefully.
