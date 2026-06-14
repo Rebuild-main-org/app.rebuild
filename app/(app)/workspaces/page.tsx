@@ -4,6 +4,7 @@ import { FolderGit2, Users } from "lucide-react"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { isAdmin } from "@/lib/auth"
+import { pluralize } from "@/lib/utils"
 import {
   membersForWorkspace,
   projectsForWorkspace,
@@ -79,8 +80,8 @@ export default async function WorkspacesPage() {
                     ))}
                   </div>
                   <div className="text-muted-foreground flex items-center gap-4 text-xs">
-                    <span>{projectCount} projects</span>
-                    <span>{openTickets} open tickets</span>
+                    <span>{pluralize(projectCount, "project")}</span>
+                    <span>{pluralize(openTickets, "open ticket")}</span>
                     <span className="flex items-center gap-1">
                       <Users className="size-3.5" /> {memberCount}
                     </span>

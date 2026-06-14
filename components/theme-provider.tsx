@@ -3,6 +3,8 @@
 import * as React from "react"
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes"
 
+import { persistTheme } from "@/components/profile/preferences-applier"
+
 function ThemeProvider({
   children,
   ...props
@@ -56,7 +58,9 @@ function ThemeHotkey() {
         return
       }
 
-      setTheme(resolvedTheme === "dark" ? "light" : "dark")
+      const next = resolvedTheme === "dark" ? "light" : "dark"
+      setTheme(next)
+      persistTheme(next)
     }
 
     window.addEventListener("keydown", onKeyDown)

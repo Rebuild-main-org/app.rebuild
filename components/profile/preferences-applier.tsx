@@ -1,8 +1,23 @@
 "use client"
 
 import { useEffect } from "react"
+import { useTheme } from "next-themes"
 
 const DEFAULT_ACCENT = "#0a0a0a"
+
+// Persist the chosen theme to the user's account so a quick toggle (topbar
+// button / "d" hotkey) survives a reload and stays in sync across devices.
+// next-themes already updated localStorage; this just mirrors it to the DB.
+export function persistTheme(theme: string) {
+  if (typeof fetch === "undefined") return
+  fetch("/api/profile", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ preferences: { theme } }),
+  }).catch(() => {
+    /* unauthenticated pages (login) 401 — ignore */
+  })
+}
 
 function readableOn(hex: string): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex)
@@ -36,9 +51,24 @@ export function applyAppearance({ density, accent }: { density?: string; accent?
 }
 
 // Mounted in the app layout to apply the saved preferences on every load.
-export function PreferencesApplier({ density, accent }: { density?: string; accent?: string }) {
+export function PreferencesApplier({
+  theme,
+  density,
+  accent,
+}: {
+  theme?: string
+  density?: string
+  accent?: string
+}) {
+  const { setTheme } = useTheme()
   useEffect(() => {
     applyAppearance({ density, accent })
   }, [density, accent])
+  // Honor the saved theme on load. next-themes otherwise reads only its own
+  // localStorage, so a saved "dark" preference never applied (the Settings
+  // dropdown showed Dark while the app rendered light).
+  useEffect(() => {
+    if (theme) setTheme(theme)
+  }, [theme, setTheme])
   return null
 }

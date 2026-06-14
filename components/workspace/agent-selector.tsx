@@ -17,16 +17,22 @@ export function AgentSelector({ workspaceId }: { workspaceId: string }) {
   const [agents, setAgents] = useState<AgentOpt[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/workspaces/${workspaceId}/agent`)
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/workspaces/${workspaceId}/agent`)
+      if (!res.ok) throw new Error(String(res.status))
       const d = await res.json()
       setAgents(d.agents ?? [])
       setSelected(d.agentIds ?? [])
+      setError(false)
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [workspaceId])
 
   useEffect(() => {
@@ -50,6 +56,12 @@ export function AgentSelector({ workspaceId }: { workspaceId: string }) {
   const remove = (id: string) => save(selected.filter((x) => x !== id))
 
   if (loading) return <div className="text-muted-foreground flex items-center gap-2 text-sm"><Loader2 className="size-4 animate-spin" /> Loading…</div>
+  if (error) return (
+    <div className="text-muted-foreground flex items-center gap-2 text-sm">
+      <X className="size-4 text-red-500" /> Couldn&apos;t load agents.
+      <button onClick={load} className="hover:text-foreground underline">Retry</button>
+    </div>
+  )
 
   const available = agents.filter((a) => !selected.includes(a.id))
   const byId = new Map(agents.map((a) => [a.id, a]))

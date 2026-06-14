@@ -88,6 +88,13 @@ export default async function AnalyticsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {engineers.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-muted-foreground py-6 text-center text-sm">
+                      No assigned tickets yet — engineer stats appear once work is assigned.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {engineers.map((e) => (
                   <TableRow key={e.userId}>
                     <TableCell>
@@ -123,6 +130,13 @@ export default async function AnalyticsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {workspaces.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-muted-foreground py-6 text-center text-sm">
+                      No active workspaces yet.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {workspaces.map((w) => (
                   <TableRow key={w.workspaceId}>
                     <TableCell className="text-sm font-medium">{w.name}</TableCell>

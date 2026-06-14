@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { useRealtime } from "@/hooks/use-realtime"
 import { can } from "@/lib/auth"
 import { SearchCommand } from "@/components/layout/search-command"
+import { persistTheme } from "@/components/profile/preferences-applier"
 import { useT } from "@/components/i18n-provider"
 import {
   BarChart3,
@@ -120,18 +121,20 @@ export function AppShell({
     { dependencies: [pathname] }
   )
 
-  // GSAP: stagger the sidebar nav items in (re-runs when the workspace changes).
+  // GSAP: stagger the sidebar nav items in — once on mount only. Re-running this
+  // on every workspace change blanked and re-slid the whole rail (~1.4s), which
+  // read as the logo/navbar "jumping" when entering a workspace.
   useGSAP(
     () => {
       gsap.from(".rb-nav-item", {
         x: -16,
         autoAlpha: 0,
-        duration: 0.4,
-        stagger: 0.05,
+        duration: 0.3,
+        stagger: 0.025,
         ease: "power3.out",
       })
     },
-    { scope: sidebarRef, dependencies: [pathname.startsWith("/workspace/") ? pathname.split("/")[2] : "global"] }
+    { scope: sidebarRef, dependencies: [] }
   )
   // GSAP: animate the mobile drawer items each time it opens.
   useGSAP(
@@ -550,7 +553,11 @@ function Topbar({
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+          onClick={() => {
+            const next = resolvedTheme === "dark" ? "light" : "dark"
+            setTheme(next)
+            persistTheme(next)
+          }}
         >
           <Sun className="size-4 dark:hidden" />
           <Moon className="hidden size-4 dark:block" />

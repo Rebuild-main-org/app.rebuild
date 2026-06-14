@@ -197,6 +197,11 @@ export default async function GitPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
+            {prs.length === 0 && (
+              <p className="text-muted-foreground text-sm">
+                No open pull requests. Open one from a feature branch — it&apos;ll show here with CI status and review actions.
+              </p>
+            )}
             {prs.map((pr) => (
               <div
                 key={pr.id}

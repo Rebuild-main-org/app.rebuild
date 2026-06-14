@@ -2,11 +2,17 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Trash2, AlertTriangle } from "lucide-react"
+import { Loader2, Trash2, AlertTriangle, MoreVertical } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Dialog,
   DialogContent,
@@ -22,11 +28,10 @@ export function DeleteWorkspaceButton({ id, name }: { id: string; name: string }
   const [busy, setBusy] = useState(false)
   const [deleteRepo, setDeleteRepo] = useState(true)
 
-  function openConfirm(e: React.MouseEvent) {
-    // Rendered inside a <Link> card — don't navigate.
+  // Rendered inside a <Link> card — stop the click from navigating.
+  function stop(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
-    setOpen(true)
   }
 
   async function confirmDelete() {
@@ -51,13 +56,25 @@ export function DeleteWorkspaceButton({ id, name }: { id: string; name: string }
 
   return (
     <>
-      <button
-        onClick={openConfirm}
-        title="Delete workspace"
-        className="text-muted-foreground hover:text-destructive rounded-md p-1"
-      >
-        <Trash2 className="size-4" />
-      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild onClick={stop}>
+          <button
+            title="Workspace actions"
+            aria-label="Workspace actions"
+            className="text-muted-foreground hover:text-foreground rounded-md p-1"
+          >
+            <MoreVertical className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" onClick={stop}>
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={() => setOpen(true)}
+          >
+            <Trash2 className="size-4" /> Delete workspace
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent onClick={(e) => e.stopPropagation()}>

@@ -261,6 +261,24 @@ export function KanbanBoard({
 
   // GSAP: stagger the columns in when the board first renders.
   const columnsRef = useRef<HTMLDivElement>(null)
+
+  // Edge-fade cues so it's obvious the columns scroll horizontally — the native
+  // (overlay) scrollbar is hidden on macOS, which made the last column look
+  // clipped/broken with no hint you could scroll to it.
+  const [scrollHints, setScrollHints] = useState({ left: false, right: false })
+  const updateScrollHints = useCallback(() => {
+    const el = columnsRef.current
+    if (!el) return
+    setScrollHints({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    })
+  }, [])
+  useEffect(() => {
+    updateScrollHints()
+    window.addEventListener("resize", updateScrollHints)
+    return () => window.removeEventListener("resize", updateScrollHints)
+  }, [updateScrollHints])
   useGSAP(
     () => {
       const cols = columnsRef.current?.children
@@ -416,7 +434,12 @@ export function KanbanBoard({
       )}
 
       {/* Columns */}
-      <div ref={columnsRef} className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-4 pb-4 md:px-6">
+      <div className="relative flex min-h-0 flex-1">
+        <div
+          ref={columnsRef}
+          onScroll={updateScrollHints}
+          className="flex h-full w-full gap-3 overflow-x-auto px-4 pb-4 md:px-6"
+        >
         {TICKET_STATUSES.map((status) => {
           const items = byStatus(status)
           const limit = WIP_LIMIT[status]
@@ -473,6 +496,22 @@ export function KanbanBoard({
             </div>
           )
         })}
+        </div>
+        {/* Horizontal scroll affordance */}
+        <div
+          aria-hidden
+          className={cn(
+            "from-background pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r to-transparent transition-opacity duration-200",
+            scrollHints.left ? "opacity-100" : "opacity-0"
+          )}
+        />
+        <div
+          aria-hidden
+          className={cn(
+            "from-background pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l to-transparent transition-opacity duration-200",
+            scrollHints.right ? "opacity-100" : "opacity-0"
+          )}
+        />
       </div>
 
       <TicketDialog

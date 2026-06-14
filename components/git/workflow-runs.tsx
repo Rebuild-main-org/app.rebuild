@@ -42,13 +42,23 @@ function RunStatus({ run }: { run: Run }) {
 export function WorkflowRuns({ workspaceId }: { workspaceId: string }) {
   const [runs, setRuns] = useState<Run[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [busy, setBusy] = useState<number | null>(null)
   const [adding, setAdding] = useState(false)
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/git/${workspaceId}/actions`)
-    if (res.ok) setRuns(await res.json())
-    setLoading(false)
+    // Always clear loading and surface failures — an unhandled fetch rejection
+    // (network/500) previously left this stuck on "Loading runs…" forever.
+    try {
+      const res = await fetch(`/api/git/${workspaceId}/actions`)
+      if (!res.ok) throw new Error(String(res.status))
+      setRuns(await res.json())
+      setError(false)
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
   }, [workspaceId])
 
   useEffect(() => {
@@ -100,6 +110,11 @@ export function WorkflowRuns({ workspaceId }: { workspaceId: string }) {
       <CardContent className="space-y-2">
         {loading ? (
           <p className="text-muted-foreground flex items-center gap-2 text-sm"><Loader2 className="size-4 animate-spin" /> Loading runs…</p>
+        ) : error ? (
+          <p className="text-muted-foreground flex items-center gap-2 text-sm">
+            <XCircle className="size-4 text-red-500" /> Couldn&apos;t load workflow runs.
+            <button onClick={load} className="hover:text-foreground underline">Retry</button>
+          </p>
         ) : runs.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             No workflow runs yet. Click <strong>Add CI</strong> to commit a starter pipeline (lint / typecheck / test / build).

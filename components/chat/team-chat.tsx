@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Send } from "lucide-react"
+import { MessagesSquare, Send } from "lucide-react"
 
 import type { Message, User } from "@/lib/types"
 import { useRealtime } from "@/hooks/use-realtime"
@@ -20,17 +20,21 @@ export function TeamChat({
   currentUserId: string
 }) {
   const [messages, setMessages] = useState<MessageWithAuthor[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [draft, setDraft] = useState("")
   const endRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/workspaces/${workspaceId}/messages`)
-    if (res.ok) setMessages(await res.json())
+    try {
+      const res = await fetch(`/api/workspaces/${workspaceId}/messages`)
+      if (res.ok) setMessages(await res.json())
+    } finally {
+      setLoaded(true)
+    }
   }, [workspaceId])
 
   useEffect(() => {
     // Fetch the message history when the workspace changes (external sync).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
   }, [load])
 
@@ -61,6 +65,13 @@ export function TeamChat({
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col p-4 md:p-6">
       <div className="flex-1 space-y-4 overflow-y-auto pb-4">
+        {loaded && messages.length === 0 && (
+          <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-2 text-center">
+            <MessagesSquare className="size-8 opacity-40" />
+            <p className="text-sm font-medium">No messages yet</p>
+            <p className="text-xs">Start the conversation — say hello to your team.</p>
+          </div>
+        )}
         {messages.map((m) => {
           const mine = m.authorId === currentUserId
           return (

@@ -29,11 +29,17 @@ export default async function AppLayout({
     getPreferences(user.id),
     sectionsAllowedFor(user.role),
   ])
-  const lang = (((await cookies()).get("rebuild_lang")?.value) as Lang) || "en"
+  // Honor the saved language preference (DB) as the source of truth; the cookie
+  // is only a fast-path the Settings form sets for an instant switch. Without
+  // this, a saved "fr" preference defaulted to "en" on any device lacking the cookie.
+  const lang =
+    (preferences.language as Lang) ||
+    (((await cookies()).get("rebuild_lang")?.value) as Lang) ||
+    "en"
 
   return (
     <I18nProvider lang={lang}>
-      <PreferencesApplier density={preferences.density} accent={preferences.accent} />
+      <PreferencesApplier theme={preferences.theme} density={preferences.density} accent={preferences.accent} />
       <AppShell
         user={user}
         workspaces={workspaces}

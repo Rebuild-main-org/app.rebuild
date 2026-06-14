@@ -8,6 +8,7 @@ import {
   ticketsForWorkspace,
 } from "@/lib/queries"
 import { MeetingsPanel } from "@/components/calendar/meetings-panel"
+import { MonthGrid } from "@/components/calendar/month-grid"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 interface AgendaItem {
@@ -57,6 +58,12 @@ export default async function CalendarPage({
           Deadlines, sprints, milestones and meetings for {ws.name}.
         </p>
       </div>
+
+      <Card>
+        <CardContent className="p-4 md:p-6">
+          <MonthGrid items={items} />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

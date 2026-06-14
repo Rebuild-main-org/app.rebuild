@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Download, FileText } from "lucide-react"
+import { toast } from "sonner"
 
 import type { Report, ReportType } from "@/lib/reports"
 import { Button } from "@/components/ui/button"
@@ -33,9 +34,15 @@ export function ReportViewer({
   async function generate() {
     if (!wsId) return
     setLoading(true)
-    const res = await fetch(`/api/reports?type=${type}&workspaceId=${wsId}`)
-    setLoading(false)
-    if (res.ok) setReport(await res.json())
+    try {
+      const res = await fetch(`/api/reports?type=${type}&workspaceId=${wsId}`)
+      if (!res.ok) throw new Error(String(res.status))
+      setReport(await res.json())
+    } catch {
+      toast.error("Could not generate the report. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -76,6 +83,14 @@ export function ReportViewer({
           </a>
         )}
       </div>
+
+      {!report && !loading && (
+        <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-12 text-center">
+          <FileText className="size-7 opacity-40" />
+          <p className="text-sm font-medium">No report generated yet</p>
+          <p className="text-xs">Pick a type and workspace above, then hit Generate to preview and export it.</p>
+        </div>
+      )}
 
       {report && (
         <Card>

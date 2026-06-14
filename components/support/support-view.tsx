@@ -16,6 +16,7 @@ import {
   type SupportStatus,
   type TicketPriority,
 } from "@/lib/types"
+import { pluralize } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -163,7 +164,7 @@ export function SupportView({
         <div>
           <h1 className="text-2xl font-semibold">Support</h1>
           <p className="text-muted-foreground text-sm">
-            {isStaff ? `${rows.length} tickets in the queue` : "Your support tickets"}
+            {isStaff ? `${pluralize(rows.length, "ticket")} in the queue` : "Your support tickets"}
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>

@@ -26,14 +26,20 @@ export function AgentsManager() {
   const [errorMsg, setErrorMsg] = useState("")
 
   const loadAgents = useCallback(async () => {
-    const res = await fetch("/api/admin/agents")
-    if (!res.ok) {
-      setErrorMsg((await res.json().catch(() => ({}))).error ?? "Failed to load")
+    try {
+      const res = await fetch("/api/admin/agents")
+      if (!res.ok) {
+        setErrorMsg((await res.json().catch(() => ({}))).error ?? "Failed to load")
+        setState("error")
+        return
+      }
+      setAgents(await res.json())
+      setState("ready")
+    } catch {
+      // A thrown fetch (network/timeout) otherwise left this on "Loading agents…" forever.
+      setErrorMsg("Couldn't reach the server.")
       setState("error")
-      return
     }
-    setAgents(await res.json())
-    setState("ready")
   }, [])
 
   const loadFiles = useCallback(async (id: string) => {
@@ -96,6 +102,7 @@ export function AgentsManager() {
     <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
       {errorMsg}
       <div className="text-muted-foreground mt-1 text-xs">Run <code>supabase/agents.sql</code> to create the agents tables.</div>
+      <button onClick={() => { setState("loading"); loadAgents() }} className="text-foreground/80 hover:text-foreground mt-2 text-xs underline">Retry</button>
     </div>
   )
 
