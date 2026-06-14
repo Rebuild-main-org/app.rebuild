@@ -16,6 +16,7 @@ const PUBLIC_PREFIXES = [
   "/api/cron",
   "/api/cli", // CLI uses Bearer-token auth, not cookies
   "/cli", // static CLI distribution (install.sh + sources)
+  "/api/metrics", // Prometheus scrape — guarded by METRICS_TOKEN (Bearer), not cookies
 ]
 
 function isPublic(pathname: string): boolean {

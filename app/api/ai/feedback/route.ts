@@ -2,6 +2,7 @@ import { requireAuth } from "@/lib/auth/guard"
 import { rateLimitResponse } from "@/lib/ratelimit"
 import { createAiFeedback } from "@/lib/mutations"
 import { scoreTrace } from "@/lib/observability/langfuse"
+import { recordFeedback } from "@/lib/observability/metrics"
 import type { AiFeedbackScore } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -38,7 +39,8 @@ export async function POST(request: Request) {
     note,
   })
   // Mirror to Langfuse so the score shows against the trace (best-effort, no-op
-  // when observability is disabled).
+  // when observability is disabled) and to Prometheus for the Grafana dashboards.
   scoreTrace(traceId, score, note)
+  recordFeedback(feature || "chat", score)
   return Response.json({ ok: true, id: feedback.id }, { status: 201 })
 }

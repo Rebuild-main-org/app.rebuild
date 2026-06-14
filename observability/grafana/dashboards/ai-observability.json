@@ -1,0 +1,115 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "REBUILD — AI Observability",
+  "uid": "rebuild-ai-obs",
+  "tags": ["rebuild", "ai", "llm"],
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "30s",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "AI spend (USD) — rate by feature",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+          "expr": "sum by (feature) (rate(ai_cost_usd_total[5m]))",
+          "legendFormat": "{{feature}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "AI spend (USD) — rate by workspace",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+          "expr": "sum by (workspace) (rate(ai_cost_usd_total[5m]))",
+          "legendFormat": "{{workspace}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "AI calls / sec by feature",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+          "expr": "sum by (feature) (rate(ai_calls_total[5m]))",
+          "legendFormat": "{{feature}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Latency p50 / p95 (s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(ai_latency_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(ai_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Quality score (feedback) by feature",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "min": -1, "max": 1 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+          "expr": "ai_feedback_score",
+          "legendFormat": "{{feature}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Error rate (%)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "rebuild-prometheus" },
+          "expr": "sum(rate(ai_calls_total{status=\"error\"}[15m])) / clamp_min(sum(rate(ai_calls_total[15m])), 1)",
+          "legendFormat": "error rate"
+        }
+      ]
+    }
+  ]
+}

@@ -73,3 +73,36 @@ mounted on the AI surfaces (code review, copilot, changelog, standup, summary…
 
 The `ai_feedback` rows + Langfuse traces are the raw material for the curated
 dataset export (later ticket) used by DSPy / distillation.
+
+## Metrics & Grafana dashboards (Ticket 3)
+
+The AI choke points also emit **Prometheus** metrics (in-process via
+`prom-client`, `lib/observability/metrics.ts`) — independent of Langfuse:
+
+| Metric | Type | Labels |
+|---|---|---|
+| `ai_calls_total` | counter | feature, model, workspace, status |
+| `ai_cost_usd_total` | counter | feature, model, workspace |
+| `ai_latency_seconds` | histogram | feature, model |
+| `ai_feedback_score` | gauge | feature |
+| `ai_feedback_total` | counter | feature, score |
+
+- Scrape endpoint: **`GET /api/metrics`** — guarded by `METRICS_TOKEN` (Bearer)
+  when set, open otherwise (set it in production). Allow-listed in `middleware.ts`.
+- Recorded from `trackedCreate` (calls/cost/latency/status) and the feedback
+  route (`recordFeedback`). Best-effort — a metrics error never breaks an AI call.
+
+### Run the dashboards
+
+```bash
+docker compose -f docker-compose.observability.yml up
+#   Grafana    → http://localhost:3001  (admin / admin)
+#   Prometheus → http://localhost:9090
+```
+
+Prometheus scrapes the app at `host.docker.internal:3000/api/metrics`
+(`observability/prometheus/prometheus.yml` — uncomment the `authorization` block
+if `METRICS_TOKEN` is set). Grafana is provisioned as code
+(`observability/grafana/`): the **REBUILD — AI Observability** dashboard shows
+cost per feature/workspace, calls/sec, p50/p95 latency, quality score and error
+rate. Langfuse traces stay in Langfuse Cloud (richer per-trace drill-down).

@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # The REBUILD app's AI metrics (/api/metrics). The app runs on the host.
+  - job_name: rebuild-app
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ["host.docker.internal:3000"]
+    # If METRICS_TOKEN is set on the app, uncomment and match it:
+    # authorization:
+    #   type: Bearer
+    #   credentials: "<METRICS_TOKEN>"
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
