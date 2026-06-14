@@ -6,6 +6,7 @@ import { can } from "@/lib/auth"
 import { createNotification } from "@/lib/mutations"
 import { ghCreateIssue, supportRepo } from "@/lib/github"
 import { appUrl } from "@/lib/email"
+import { reportType } from "@/lib/support"
 import { SLA_HOURS, type SupportStatus, type TicketPriority } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -35,15 +36,18 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireAuth()
   if (auth instanceof Response) return auth
-  const { subject, body, priority, workspaceId } = (await request.json()) as {
+  const { subject, body, priority, workspaceId, reportType: reportTypeRaw } = (await request.json()) as {
     subject?: string
     body?: string
     priority?: TicketPriority
     workspaceId?: string
+    reportType?: string
   }
   if (!subject?.trim()) {
     return Response.json({ error: "subject is required" }, { status: 400 })
   }
+  const rt = reportType(reportTypeRaw) // resolves to a known type (default: bug)
+  const typeTag = rt.value.charAt(0).toUpperCase() + rt.value.slice(1)
   const prio = priority ?? "MEDIUM"
   const slaDue = new Date(Date.now() + SLA_HOURS[prio] * 3_600_000).toISOString()
   const now = new Date().toISOString()
@@ -69,11 +73,12 @@ export async function POST(request: Request) {
   let githubIssueNumber: number | undefined
   let githubIssueUrl: string | undefined
   const issue = await ghCreateIssue(supportRepo(), {
-    title: `[Support] ${row.subject}`,
+    title: `[Support · ${typeTag}] ${row.subject}`,
     body: [
       row.body || "_No description provided._",
       "",
       "---",
+      `- **Type:** ${rt.label}`,
       `- **Requester:** ${row.requester_email}`,
       `- **Priority:** ${prio}`,
       row.workspace_id ? `- **Workspace:** \`${row.workspace_id}\`` : null,
@@ -81,7 +86,7 @@ export async function POST(request: Request) {
     ]
       .filter(Boolean)
       .join("\n"),
-    labels: ["support"],
+    labels: ["support", ...rt.ghLabels],
   })
   if (issue) {
     githubIssueNumber = issue.number
