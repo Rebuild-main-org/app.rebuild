@@ -7,10 +7,12 @@ import { Send, Sparkles, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { AiFeedback } from "@/components/ai/ai-feedback"
 
 interface Msg {
   role: "user" | "assistant"
   content: string
+  traceId?: string
 }
 
 // Floating, context-aware Copilot available on every page. Rendered by the app
@@ -65,6 +67,7 @@ export function Copilot() {
         {
           role: "assistant",
           content: res.ok ? data.reply : data.error ?? "Something went wrong.",
+          traceId: res.ok ? data.traceId : undefined,
         },
       ])
     } catch {
@@ -131,13 +134,22 @@ export function Copilot() {
                 key={i}
                 className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
               >
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
-                    m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                <div className={cn("max-w-[85%]", m.role === "assistant" && "space-y-1.5")}>
+                  <div
+                    className={cn(
+                      "rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
+                      m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                    )}
+                  >
+                    {m.content}
+                  </div>
+                  {m.role === "assistant" && m.traceId && (
+                    <AiFeedback
+                      traceId={m.traceId}
+                      feature="chat"
+                      workspaceId={context.workspaceId}
+                    />
                   )}
-                >
-                  {m.content}
                 </div>
               </div>
             ))}

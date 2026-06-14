@@ -46,9 +46,11 @@ export async function POST(request: Request) {
       : "No working changes detected; reviewing PR metadata only."
 
   try {
-    const review = await withAi(auth, "review", () => codeReview({ title, diff, ticket }), { workspaceId: wsId })
+    const traceRef: { id?: string } = {}
+    const review = await withAi(auth, "review", () => codeReview({ title, diff, ticket }), { workspaceId: wsId, traceRef })
     return Response.json({
       review,
+      traceId: traceRef.id,
       pr: pr
         ? { number: pr.number, title: pr.title, author: (await userById(pr.authorId))?.name }
         : null,

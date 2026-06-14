@@ -32,8 +32,9 @@ export async function POST(request: Request) {
     .map((m) => ({ id: m.user.id, name: m.user.name, role: m.user.role, openLoad: load.get(m.user.id) ?? 0 }))
 
   try {
-    const suggestion = await withAi(auth, "triage", () => triageTicket({ title, description: description ?? "", candidates }), { projectId })
-    return Response.json(suggestion)
+    const traceRef: { id?: string } = {}
+    const suggestion = await withAi(auth, "triage", () => triageTicket({ title, description: description ?? "", candidates }), { projectId, traceRef })
+    return Response.json({ ...suggestion, traceId: traceRef.id })
   } catch (e) {
     if (e instanceof AiBudgetError) return Response.json({ error: e.message }, { status: 429 })
     if (e instanceof AINotConfiguredError) return Response.json({ error: e.message }, { status: 503 })

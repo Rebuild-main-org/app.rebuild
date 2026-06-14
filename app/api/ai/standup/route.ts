@@ -35,8 +35,9 @@ export async function POST(request: Request) {
   ].join("\n")
 
   try {
-    const digest = await withAi(auth, "standup", () => standupDigest(content), { workspaceId })
-    return Response.json({ digest })
+    const traceRef: { id?: string } = {}
+    const digest = await withAi(auth, "standup", () => standupDigest(content), { workspaceId, traceRef })
+    return Response.json({ digest, traceId: traceRef.id })
   } catch (e) {
     if (e instanceof AiBudgetError) return Response.json({ error: e.message }, { status: 429 })
     if (e instanceof AINotConfiguredError) return Response.json({ error: e.message }, { status: 503 })

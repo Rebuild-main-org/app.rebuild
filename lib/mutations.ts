@@ -13,6 +13,8 @@ import { emailEnabled, sendEmail, layout, appUrl } from "./email"
 import { notifySlack, slackEnabled } from "./slack"
 import type {
   ActivityKind,
+  AiFeedback,
+  AiFeedbackScore,
   Branch,
   Comment,
   GitCommit,
@@ -716,4 +718,37 @@ export async function deleteTimeEntry(id: string): Promise<boolean> {
   await sb().from("time_entries").delete().eq("id", id)
   emit([`ticket:${data.ticket_id}`], "time.logged", { ticketId: data.ticket_id }, actor)
   return true
+}
+
+// Record human feedback on an AI output (Ticket 2). One row per submission;
+// re-rating the same trace just appends (latest wins when read/aggregated).
+export async function createAiFeedback(input: {
+  traceId: string
+  userId: string
+  workspaceId?: string
+  feature: string
+  score: AiFeedbackScore
+  note?: string
+}): Promise<AiFeedback> {
+  const row: AiFeedback = {
+    id: randomUUID(),
+    traceId: input.traceId,
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+    feature: input.feature,
+    score: input.score,
+    note: input.note?.trim() || undefined,
+    createdAt: new Date().toISOString(),
+  }
+  await sb().from("ai_feedback").insert({
+    id: row.id,
+    trace_id: row.traceId,
+    user_id: row.userId,
+    workspace_id: row.workspaceId ?? null,
+    feature: row.feature,
+    score: row.score,
+    note: row.note ?? null,
+    created_at: row.createdAt,
+  })
+  return row
 }

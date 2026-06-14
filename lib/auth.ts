@@ -26,6 +26,8 @@ export type Action =
   | "support.manage"
   | "support.resolve"
   | "notify.broadcast"
+  | "ai.feedback.create"
+  | "ai.traces.read"
 
 const MATRIX: Record<Action, Role[]> = {
   // Creating a workspace is reserved to the SUPER_ADMIN (it only happens from an
@@ -56,6 +58,10 @@ const MATRIX: Record<Action, Role[]> = {
   // Only a SUPER_ADMIN may resolve/handle a user's ticket and broadcast notices.
   "support.resolve": ["SUPER_ADMIN"],
   "notify.broadcast": ["SUPER_ADMIN"],
+  // Any internal staff (not the external CLIENT) can rate an AI output they see.
+  "ai.feedback.create": ["ADMIN", "LEAD", "PM", "ENGINEER", "QA", "DESIGNER", "SALES", "FINANCE", "SUPPORT"],
+  // Reading raw traces / the curated dataset is sensitive — admins only.
+  "ai.traces.read": ["ADMIN"],
 }
 
 export function can(user: Pick<User, "role"> | undefined, action: Action): boolean {

@@ -20,8 +20,9 @@ export async function POST(request: Request) {
     .join("\n")
 
   try {
-    const changelog = await withAi(auth, "changelog", () => changelogFromPRs(content), { workspaceId: wsId })
-    return Response.json({ changelog })
+    const traceRef: { id?: string } = {}
+    const changelog = await withAi(auth, "changelog", () => changelogFromPRs(content), { workspaceId: wsId, traceRef })
+    return Response.json({ changelog, traceId: traceRef.id })
   } catch (e) {
     if (e instanceof AiBudgetError) return Response.json({ error: e.message }, { status: 429 })
     if (e instanceof AINotConfiguredError) return Response.json({ error: e.message }, { status: 503 })

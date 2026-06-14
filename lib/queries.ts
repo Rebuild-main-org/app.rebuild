@@ -12,6 +12,7 @@ import {
 } from "./github"
 import {
   PRIORITY_META,
+  type AiFeedback,
   type Branch,
   type Milestone,
   type Project,
@@ -541,4 +542,20 @@ export async function buildTree(workspaceId: string): Promise<TreeNode[]> {
   }
   sortLevel(root)
   return root
+}
+
+// --- AI feedback (read) ------------------------------------------------------
+
+// Feedback rows, newest first, with optional filters. Backs the curated-dataset
+// export (Ticket 4) and any admin view. Read-only; writes live in mutations.ts.
+export async function aiFeedback(
+  filter: { feature?: string; workspaceId?: string; minScore?: number; since?: string } = {}
+): Promise<AiFeedback[]> {
+  let q = sb().from("ai_feedback").select(SEL.aiFeedback).order("created_at", { ascending: false })
+  if (filter.feature) q = q.eq("feature", filter.feature)
+  if (filter.workspaceId) q = q.eq("workspace_id", filter.workspaceId)
+  if (typeof filter.minScore === "number") q = q.gte("score", filter.minScore)
+  if (filter.since) q = q.gte("created_at", filter.since)
+  const { data } = await q
+  return (data ?? []) as unknown as AiFeedback[]
 }
