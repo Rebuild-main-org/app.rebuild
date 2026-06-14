@@ -248,7 +248,7 @@ export function AppShell({
           <img src="/logo.png" alt="REBUILD" className="h-6 w-auto object-contain brightness-0 dark:invert" />
         </div>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           <nav className="space-y-4 p-3">
             {navGroups.map((g, gi) => (
               <div key={gi} className="space-y-1">
