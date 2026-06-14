@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { AiFeedback } from "@/components/ai/ai-feedback"
 
 const TYPES: TicketType[] = ["TASK", "BUG", "FEATURE", "REVIEW", "EPIC", "SPIKE"]
 const PRIORITIES: TicketPriority[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
@@ -59,6 +60,7 @@ export function CreateTicketDialog({
   const [points, setPoints] = useState<string>("none")
   const [saving, setSaving] = useState(false)
   const [triaging, setTriaging] = useState(false)
+  const [triageTraceId, setTriageTraceId] = useState<string | undefined>()
 
   async function triage() {
     if (!title.trim()) return toast.error("Add a title first")
@@ -74,6 +76,7 @@ export function CreateTicketDialog({
       setType(data.type)
       setPriority(data.priority)
       if (data.suggestedAssigneeId) setAssigneeId(data.suggestedAssigneeId)
+      setTriageTraceId(data.traceId)
       toast.success(`AI: ${data.type} · ${data.priority} — ${data.reason}`)
     } finally {
       setTriaging(false)
@@ -156,6 +159,7 @@ export function CreateTicketDialog({
               {triaging ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
               AI triage
             </Button>
+            {triageTraceId && <AiFeedback traceId={triageTraceId} feature="triage" />}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

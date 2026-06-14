@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { LEAD_STAGES, LEAD_STAGE_META, type Lead, type LeadStage } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { toastAiResult } from "@/components/ai/ai-feedback"
 import {
   Dialog,
   DialogContent,
@@ -146,7 +147,13 @@ export function PipelineBoard({
       const res = await fetch(`/api/crm/leads/${lead.id}/quote`, { method: "POST" })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) return toast.error(data.error ?? "Could not generate quote")
-      toast.success(`Draft quote ${data.number} created — see Admin panel`)
+      toastAiResult({
+        title: `Draft quote ${data.number} created`,
+        description: "Review it in the Admin panel.",
+        traceId: data.traceId,
+        feature: "quote",
+        workspaceId: lead.workspaceId,
+      })
     } finally {
       setQuoting(null)
     }
