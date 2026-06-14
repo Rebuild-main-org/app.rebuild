@@ -1,0 +1,35 @@
+// Grafana Alloy — ship the REBUILD app's AI metrics to Grafana Cloud.
+//
+// Use this INSTEAD of the local Prometheus in docker-compose.observability.yml
+// when you want the dashboards in your Grafana Cloud stack (serenefennec800,
+// prod-eu-central-0) rather than self-hosted. Alloy scrapes /api/metrics and
+// remote_writes to Grafana Cloud's hosted Prometheus.
+//
+// Run:  alloy run observability/alloy/config.alloy
+// Env (do NOT hard-code secrets here):
+//   GRAFANA_CLOUD_PROM_URL   Grafana Cloud → Connections → Prometheus → "Sending metrics"
+//                            e.g. https://prometheus-prod-NN-prod-eu-central-0.grafana.net/api/prom/push
+//   GRAFANA_CLOUD_PROM_USER  the numeric instance/username from that same page
+//   GRAFANA_CLOUD_TOKEN      the access-policy token (password) — in .env.local
+//   METRICS_TOKEN            optional Bearer for the app's /api/metrics
+//
+// (The exact PROM_URL + USER must be copied from your Grafana Cloud Prometheus
+// connection page — they can't be derived from the access token alone.)
+
+prometheus.scrape "rebuild_app" {
+  targets = [{ __address__ = "host.docker.internal:3000", __metrics_path__ = "/api/metrics" }]
+  // If METRICS_TOKEN is set on the app, add:
+  // bearer_token = sys.env("METRICS_TOKEN")
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "15s"
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_PROM_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_PROM_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+}

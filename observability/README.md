@@ -114,6 +114,21 @@ if `METRICS_TOKEN` is set). Grafana is provisioned as code
 cost per feature/workspace, calls/sec, p50/p95 latency, quality score and error
 rate. Langfuse traces stay in Langfuse Cloud (richer per-trace drill-down).
 
+### Option B — ship metrics to Grafana Cloud (instead of self-hosting)
+
+Grafana Cloud can't scrape your local/Vercel endpoint, so push instead with
+**Grafana Alloy** (`observability/alloy/config.alloy`): it scrapes `/api/metrics`
+and `remote_write`s to your Grafana Cloud Prometheus.
+
+```bash
+alloy run observability/alloy/config.alloy
+```
+
+Set `GRAFANA_CLOUD_PROM_URL` + `GRAFANA_CLOUD_PROM_USER` (copy both from Grafana
+Cloud → Connections → Prometheus → "Sending metrics") and `GRAFANA_CLOUD_TOKEN`
+(the access token, in `.env.local`). Import the same dashboard JSON into your
+Cloud stack. Secrets are read from env — never hard-coded in the config.
+
 ## Curated dataset export (Ticket 4)
 
 Joins human feedback (`ai_feedback`) with the traced prompt/response (Langfuse)
