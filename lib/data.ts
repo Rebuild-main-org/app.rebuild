@@ -72,6 +72,8 @@ export const SEL = {
     "id,sprintId:sprint_id,day,remainingPoints:remaining_points,donePoints:done_points,capturedAt:captured_at",
   auditLog:
     "id,action,entityType:entity_type,entityId:entity_id,userId:user_id,meta,createdAt:created_at",
+  aiFeedback:
+    "id,traceId:trace_id,userId:user_id,workspaceId:workspace_id,feature,score,note,createdAt:created_at",
   customField:
     "id,projectId:project_id,name,type,options,createdAt:created_at",
 } as const

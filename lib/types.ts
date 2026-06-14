@@ -256,6 +256,19 @@ export interface SupportComment {
   createdAt: string
 }
 
+// Human feedback on an AI output (Ticket 2). -1 = thumbs down, 1 = up, 0 = clear.
+export type AiFeedbackScore = -1 | 0 | 1
+export interface AiFeedback {
+  id: string
+  traceId: string
+  userId?: string
+  workspaceId?: string
+  feature: string
+  score: AiFeedbackScore
+  note?: string
+  createdAt: string
+}
+
 export const SUPPORT_STATUS_META: Record<SupportStatus, { label: string; color: string }> = {
   NEW: { label: "New", color: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
   OPEN: { label: "Open", color: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },

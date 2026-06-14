@@ -15,16 +15,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { AiFeedback } from "@/components/ai/ai-feedback"
 
 export function AiInsights({ workspaceId }: { workspaceId: string }) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
+  const [feature, setFeature] = useState<"standup" | "changelog">("standup")
+  const [traceId, setTraceId] = useState<string | undefined>()
   const [loading, setLoading] = useState<null | "standup" | "changelog">(null)
 
   async function run(kind: "standup" | "changelog") {
     setLoading(kind)
     setBody("")
+    setTraceId(undefined)
+    setFeature(kind)
     setTitle(kind === "standup" ? "Daily standup" : "Changelog")
     setOpen(true)
     try {
@@ -42,6 +47,7 @@ export function AiInsights({ workspaceId }: { workspaceId: string }) {
         return
       }
       setBody(kind === "standup" ? data.digest : data.changelog)
+      setTraceId(data.traceId)
     } finally {
       setLoading(null)
     }
@@ -69,7 +75,10 @@ export function AiInsights({ workspaceId }: { workspaceId: string }) {
           {loading ? (
             <p className="text-muted-foreground py-8 text-center text-sm">Generating…</p>
           ) : (
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{body}</pre>
+            <>
+              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{body}</pre>
+              {traceId && <AiFeedback className="mt-3" traceId={traceId} feature={feature} workspaceId={workspaceId} />}
+            </>
           )}
         </DialogContent>
       </Dialog>

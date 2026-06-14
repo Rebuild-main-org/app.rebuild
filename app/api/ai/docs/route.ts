@@ -20,8 +20,9 @@ export async function POST(request: Request) {
   const file = await getRepoFile(wsId, path)
   if (!file) return Response.json({ error: "Not found" }, { status: 404 })
   try {
-    const docs = await withAi(auth, "docs", () => generateDocs({ path: file.path, code: file.content }), { workspaceId: wsId })
-    return Response.json({ docs })
+    const traceRef: { id?: string } = {}
+    const docs = await withAi(auth, "docs", () => generateDocs({ path: file.path, code: file.content }), { workspaceId: wsId, traceRef })
+    return Response.json({ docs, traceId: traceRef.id })
   } catch (e) {
     if (e instanceof AiBudgetError) return Response.json({ error: e.message }, { status: 429 })
     if (e instanceof AINotConfiguredError) {

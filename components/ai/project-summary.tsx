@@ -5,9 +5,11 @@ import { Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { AiFeedback } from "@/components/ai/ai-feedback"
 
 export function ProjectSummary({ projectId }: { projectId: string }) {
   const [summary, setSummary] = useState<string | null>(null)
+  const [traceId, setTraceId] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
 
   async function run() {
@@ -20,6 +22,7 @@ export function ProjectSummary({ projectId }: { projectId: string }) {
     const data = await res.json().catch(() => ({}))
     setLoading(false)
     setSummary(res.ok ? data.summary : "Could not generate summary.")
+    setTraceId(res.ok ? data.traceId : undefined)
   }
 
   return (
@@ -36,7 +39,10 @@ export function ProjectSummary({ projectId }: { projectId: string }) {
       </CardHeader>
       <CardContent>
         {summary ? (
-          <p className="text-sm whitespace-pre-wrap">{summary}</p>
+          <>
+            <p className="text-sm whitespace-pre-wrap">{summary}</p>
+            {traceId && <AiFeedback className="mt-3" traceId={traceId} feature="summary" />}
+          </>
         ) : (
           <p className="text-muted-foreground text-sm">
             Generate a plain-language status summary of this project for a client

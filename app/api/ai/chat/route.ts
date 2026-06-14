@@ -55,6 +55,7 @@ export async function POST(request: Request) {
 
   const message = body.message.trim()
   try {
+    const traceRef: { id?: string } = {}
     const reply = await withAi(
       user,
       "chat",
@@ -64,9 +65,9 @@ export async function POST(request: Request) {
           history: (body.history ?? []).slice(-8),
           message,
         }),
-      { workspaceId: body.workspaceId, projectId: body.projectId }
+      { workspaceId: body.workspaceId, projectId: body.projectId, traceRef }
     )
-    return Response.json({ reply })
+    return Response.json({ reply, traceId: traceRef.id })
   } catch (e) {
     if (e instanceof AiBudgetError) return Response.json({ error: e.message }, { status: 429 })
     if (e instanceof AINotConfiguredError) {

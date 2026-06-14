@@ -30,8 +30,9 @@ export async function POST(request: Request) {
   const content = `Project: ${project.name} (status ${project.status})\nDescription: ${project.description}\n\nTickets:\n${lines.join("\n")}\n\nMilestones:\n${milestones.join("\n")}`
 
   try {
-    const summary = await withAi(auth, "summary", () => summarize({ kind: kind ?? "project", content }), { projectId })
-    return Response.json({ summary })
+    const traceRef: { id?: string } = {}
+    const summary = await withAi(auth, "summary", () => summarize({ kind: kind ?? "project", content }), { projectId, traceRef })
+    return Response.json({ summary, traceId: traceRef.id })
   } catch (e) {
     if (e instanceof AiBudgetError) return Response.json({ error: e.message }, { status: 429 })
     if (e instanceof AINotConfiguredError) {

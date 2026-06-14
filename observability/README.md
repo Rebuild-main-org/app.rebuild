@@ -54,3 +54,22 @@ trace; with them unset, behavior is unchanged.
 For the CLI to emit MCP spans, `langfuse` must be installed in the CLI
 environment (declared as an **optional** dependency in `cli/package.json`); if
 it isn't, or keys are unset, the MCP server silently skips spans.
+
+## Human feedback (Ticket 2)
+
+Every traced AI output can be rated 👍/👎 (+ optional note) via the
+`<AiFeedback traceId feature />` widget (`components/ai/ai-feedback.tsx`),
+mounted on the AI surfaces (code review, copilot, changelog, standup, summary…).
+
+- Each AI route returns the `traceId` (read from `currentTraceId()` via the
+  `withAi` `traceRef` out-param) so the widget can attach feedback to it.
+- `POST /api/ai/feedback` — gated by `can(user, 'ai.feedback.create')`,
+  rate-limited, writes a row to **`ai_feedback`** *and* mirrors the score to
+  Langfuse via `langfuse.score()` (a no-op when Langfuse is off — the DB row is
+  always written, so feedback works with or without observability).
+- New RBAC actions: `ai.feedback.create` (all internal staff) and
+  `ai.traces.read` (admins — used by the dataset export).
+- Migration: `supabase/ai-feedback.sql` (also folded into `all.sql`).
+
+The `ai_feedback` rows + Langfuse traces are the raw material for the curated
+dataset export (later ticket) used by DSPy / distillation.

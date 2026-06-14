@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
+import { AiFeedback } from "@/components/ai/ai-feedback"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,6 +67,7 @@ export function PrActions({
 }) {
   const router = useRouter()
   const [review, setReview] = useState<CodeReview | null>(null)
+  const [reviewTraceId, setReviewTraceId] = useState<string | undefined>()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [merging, setMerging] = useState(false)
@@ -86,8 +88,11 @@ export function PrActions({
       body: JSON.stringify({ wsId: workspaceId, prNumber }),
     })
     setLoading(false)
-    if (res.ok) setReview((await res.json()).review)
-    else toast.error("Review failed")
+    if (res.ok) {
+      const d = await res.json()
+      setReview(d.review)
+      setReviewTraceId(d.traceId)
+    } else toast.error("Review failed")
   }
 
   async function loadReviews() {
@@ -233,6 +238,7 @@ export function PrActions({
                 ))}
                 {review.findings.length === 0 && <p className="text-muted-foreground text-sm">No issues found. 🎉</p>}
               </div>
+              {reviewTraceId && <AiFeedback traceId={reviewTraceId} feature="review" workspaceId={workspaceId} />}
             </div>
           )}
         </DialogContent>

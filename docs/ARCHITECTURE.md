@@ -250,6 +250,8 @@ ADMIN ou SUPER_ADMIN.
 | `support.manage` | ADMIN, LEAD, SUPPORT |
 | `support.resolve` | SUPER_ADMIN uniquement |
 | `notify.broadcast` | SUPER_ADMIN uniquement |
+| `ai.feedback.create` | tout le staff interne (sauf CLIENT) — noter une sortie IA |
+| `ai.traces.read` | ADMIN *(lecture des traces / dataset d'amélioration)* |
 
 **(b) Sections de navigation** — `lib/permissions.ts`. Sections : `dashboard,
 workspaces, crm, support, analytics, reports`. `canAccessSection(role, section)`
@@ -639,7 +641,8 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 | Route | Méthodes | Auth | |
 |---|---|---|---|
 | `ai/chat` | POST | `copilot.use` | copilote |
-| `ai/review`, `ai/docs`, `ai/triage`, `ai/summary`, `ai/standup`, `ai/changelog` | POST | (interne) | revue, docs, triage, résumé, standup, changelog |
+| `ai/review`, `ai/docs`, `ai/triage`, `ai/summary`, `ai/standup`, `ai/changelog` | POST | (interne) | revue, docs, triage, résumé, standup, changelog (renvoient un `traceId` pour le feedback) |
+| `ai/feedback` | POST | `ai.feedback.create` | note 👍/👎 (+ note) d'une sortie IA → table `ai_feedback` + `langfuse.score()` (best-effort), rate-limité |
 
 ### 11.7 CRM & Finance
 | Route | Méthodes | Auth | |
@@ -750,7 +753,8 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 `project-groups.sql`, `crm-fixes.sql`, `discord*.sql`, `agents*.sql`,
 `time-tracking.sql`, `qa-support.sql`, **`support-github-issue.sql`**
 (colonnes `github_issue_number`/`github_issue_url` du lien ticket↔issue),
-`custom-fields.sql`, `vercel.sql`, `super-admin.sql`, `admin-user.sql`.
+`custom-fields.sql`, `vercel.sql`, `super-admin.sql`, `admin-user.sql`,
+**`ai-feedback.sql`** (feedback humain 👍/👎 sur les sorties IA, Ticket 2).
 
 ### Déploiement (Vercel)
 - Build Turbopack. **Ne pas** activer `output: "standalone"` ni
