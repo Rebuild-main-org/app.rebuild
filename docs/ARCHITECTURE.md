@@ -129,6 +129,7 @@ next-app/
 | `VERCEL_TOKEN` / `VERCEL_TEAM_ID` | Infos de déploiement Vercel | section vide |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` | Observabilité LLM (traces Langfuse) | tracing no-op, IA inchangée |
 | `LANGFUSE_CAPTURE_IO` | Capter le texte prompt/réponse (redacté) dans les traces | métadonnées seules (pas d'IO) |
+| `METRICS_TOKEN` | Protège `/api/metrics` (Bearer, scrape Prometheus) | endpoint ouvert |
 
 > **Déploiement Vercel — interdits** : ne pas mettre `output: "standalone"` ni
 > `"type":"module"` dans `package.json`. Combinés, ils provoquent
@@ -553,6 +554,7 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 | `auth/me` | GET | session | utilisateur courant |
 | `auth/logout` | POST | — | invalide la session |
 | `health` | GET | public | sonde de santé |
+| `metrics` | GET | `METRICS_TOKEN` (Bearer) | métriques Prometheus de la couche IA (calls/coût/latence/feedback) → Grafana |
 | `cron` | GET | `CRON_SECRET` | snapshot burndown des sprints actifs |
 | `events` | GET, POST | session | flux SSE temps réel / émission |
 | `presence` | POST | session | mise à jour de présence |

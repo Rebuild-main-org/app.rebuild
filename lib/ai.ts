@@ -6,8 +6,9 @@ import { createHash } from "crypto"
 
 import Anthropic from "@anthropic-ai/sdk"
 
-import { currentApiKey, currentTrace, recordAiUsage, costUsd } from "./ai-usage"
+import { currentApiKey, currentTrace, currentFeature, currentWorkspaceId, recordAiUsage, costUsd } from "./ai-usage"
 import { captureIo, redact } from "./observability/langfuse"
+import { recordAiCall } from "./observability/metrics"
 import { getAiModel, getCheapAiModel } from "./settings"
 import { loadSystemPrompt } from "./doc-loader"
 import type { SpecForm, SpecRevision } from "./blueprint-types"
@@ -66,34 +67,35 @@ async function trackedCreate(
   // cheap-tier calls resolve the (also admin-configurable) Haiku-class model.
   const model = opts.tier === "cheap" ? await getCheapAiModel() : await getAiModel()
 
+  const feature = currentFeature() ?? "chat"
+  const workspace = currentWorkspaceId()
   const gen = currentTrace()?.generation({
     name: "generation",
     model,
     input: captureIo() ? redact(params.messages) : undefined,
     promptVersion: promptVersionOf(params.system),
   })
+  const t0 = Date.now()
   try {
     const res = await client.messages.create({ ...params, model })
     await recordAiUsage(model, res.usage)
     const inTok = res.usage?.input_tokens ?? 0
     const outTok = res.usage?.output_tokens ?? 0
-    gen?.end({
-      output: captureIo() ? redact(res.content) : undefined,
-      inputTokens: inTok,
-      outputTokens: outTok,
-      costUsd: Number(
-        costUsd(
-          model,
-          inTok,
-          outTok,
-          res.usage?.cache_read_input_tokens ?? 0,
-          res.usage?.cache_creation_input_tokens ?? 0
-        ).toFixed(6)
-      ),
-    })
+    const cost = Number(
+      costUsd(
+        model,
+        inTok,
+        outTok,
+        res.usage?.cache_read_input_tokens ?? 0,
+        res.usage?.cache_creation_input_tokens ?? 0
+      ).toFixed(6)
+    )
+    gen?.end({ output: captureIo() ? redact(res.content) : undefined, inputTokens: inTok, outputTokens: outTok, costUsd: cost })
+    recordAiCall({ feature, model, workspace, status: "ok", costUsd: cost, latencySec: (Date.now() - t0) / 1000 })
     return res
   } catch (e) {
     gen?.end({ error: true, statusMessage: e instanceof Error ? e.message : "AI call failed" })
+    recordAiCall({ feature, model, workspace, status: "error", latencySec: (Date.now() - t0) / 1000 })
     throw e
   }
 }

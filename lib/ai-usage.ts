@@ -76,6 +76,15 @@ export function currentTraceId(): string | undefined {
   return store.getStore()?.traceId
 }
 
+// Current feature / workspace for the in-flight AI call — used to label metrics
+// from the trackedCreate choke point. Undefined outside a withAi scope.
+export function currentFeature(): string | undefined {
+  return store.getStore()?.feature
+}
+export function currentWorkspaceId(): string | undefined {
+  return store.getStore()?.workspaceId
+}
+
 // A user's connected Anthropic key (« Connect with Claude »), or undefined.
 export async function userAnthropicKey(userId: string): Promise<string | undefined> {
   try {
