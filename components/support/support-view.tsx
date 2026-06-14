@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Plus, Clock, Loader2, MessageSquare, Send, Trash2 } from "lucide-react"
+import { Plus, Clock, CircleDot, Loader2, MessageSquare, Send, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -48,6 +48,8 @@ export interface SupportRow {
   priority: TicketPriority
   slaDueAt?: string
   assignee?: string
+  githubIssueNumber?: number
+  githubIssueUrl?: string
   createdAt: string
 }
 
@@ -245,6 +247,19 @@ export function SupportView({
                 {t.body && <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">{t.body}</p>}
               </button>
               <div className="text-muted-foreground flex shrink-0 items-center gap-2 text-xs">
+                {t.githubIssueUrl && (
+                  <a
+                    href={t.githubIssueUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Open the linked GitHub issue"
+                    className="hover:text-foreground flex items-center gap-1"
+                  >
+                    <CircleDot className="size-3.5" />
+                    {t.githubIssueNumber ? `#${t.githubIssueNumber}` : "issue"}
+                  </a>
+                )}
                 {s && (
                   <span className={s.overdue ? "text-red-500" : ""}>
                     <Clock className="mr-1 inline size-3" />{s.label}

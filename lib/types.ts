@@ -241,6 +241,8 @@ export interface SupportTicket {
   resolvedById?: string
   resolvedAt?: string
   slaDueAt?: string
+  githubIssueNumber?: number
+  githubIssueUrl?: string
   createdAt: string
   updatedAt: string
 }

@@ -33,6 +33,12 @@ export function defaultRepoFor(slug: string): string {
   return `${defaultOrg()}/${slug}`
 }
 
+// Single repo that support tickets open issues against (overridable via env).
+// Defaults to the platform repo so tickets are triaged in one place.
+export function supportRepo(): string {
+  return process.env.SUPPORT_GITHUB_REPO || `${defaultOrg()}/app.rebuild`
+}
+
 // One repo per workspace, one branch per project: a git-safe branch name from a
 // project name (e.g. "Auth, RLS & Multi-tenancy" → "auth-rls-multi-tenancy").
 export function branchForProject(name: string, shortCode?: string): string {
@@ -357,6 +363,30 @@ export async function ghOpenOrUpdatePR(
     return { number: pr.number, url: pr.html_url }
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not open the PR" }
+  }
+}
+
+// Open a GitHub issue (best-effort). Returns the issue number + URL, or null if
+// GitHub is disabled / the repo is invalid / the API call fails — callers must
+// not let a GitHub hiccup block the underlying action (e.g. saving a ticket).
+export async function ghCreateIssue(
+  githubRepo: string,
+  { title, body, labels }: { title: string; body: string; labels?: string[] }
+): Promise<{ number: number; url: string } | null> {
+  if (!githubEnabled()) return null
+  const r = parseRepo(githubRepo)
+  if (!r) return null
+  try {
+    const { data } = await octokit().issues.create({
+      owner: r.owner,
+      repo: r.repo,
+      title,
+      body,
+      labels,
+    })
+    return { number: data.number, url: data.html_url }
+  } catch {
+    return null
   }
 }
 

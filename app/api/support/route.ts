@@ -1,9 +1,11 @@
 import { randomUUID } from "crypto"
 
-import { SEL, getUsersMap, sb } from "@/lib/data"
+import { fetchSupportTickets, getUsersMap, sb } from "@/lib/data"
 import { requireAuth } from "@/lib/auth/guard"
 import { can } from "@/lib/auth"
 import { createNotification } from "@/lib/mutations"
+import { ghCreateIssue, supportRepo } from "@/lib/github"
+import { appUrl } from "@/lib/email"
 import { SLA_HOURS, type SupportStatus, type TicketPriority } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -14,15 +16,17 @@ export async function GET(request: Request) {
   const auth = await requireAuth()
   if (auth instanceof Response) return auth
   const status = new URL(request.url).searchParams.get("status")
-  let q = sb().from("support_tickets").select(SEL.supportTicket).order("created_at", { ascending: false })
-  if (status) q = q.eq("status", status)
-  if (!can(auth, "support.view")) {
-    // Own tickets only — by requester id, or legacy tickets matched on email.
-    q = q.or(`requester_id.eq.${auth.id},requester_email.ilike.${auth.email}`)
-  }
-  const [{ data }, users] = await Promise.all([q, getUsersMap()])
+  const [data, users] = await Promise.all([
+    fetchSupportTickets({
+      isStaff: can(auth, "support.view"),
+      ownerId: auth.id,
+      ownerEmail: auth.email,
+      status,
+    }),
+    getUsersMap(),
+  ])
   return Response.json(
-    (data ?? []).map((t) => ({ ...t, assignee: users.get(t.assigneeId as string)?.name }))
+    data.map((t) => ({ ...t, assignee: users.get(t.assigneeId as string)?.name }))
   )
 }
 
@@ -60,6 +64,34 @@ export async function POST(request: Request) {
   const { error } = await sb().from("support_tickets").insert(row)
   if (error) return Response.json({ error: error.message }, { status: 400 })
 
+  // Best-effort: open a GitHub issue in the support repo so tickets are triaged
+  // alongside engineering work. A GitHub outage never blocks ticket creation.
+  let githubIssueNumber: number | undefined
+  let githubIssueUrl: string | undefined
+  const issue = await ghCreateIssue(supportRepo(), {
+    title: `[Support] ${row.subject}`,
+    body: [
+      row.body || "_No description provided._",
+      "",
+      "---",
+      `- **Requester:** ${row.requester_email}`,
+      `- **Priority:** ${prio}`,
+      row.workspace_id ? `- **Workspace:** \`${row.workspace_id}\`` : null,
+      `- **Ticket:** ${appUrl(`/support?ticket=${row.id}`)}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    labels: ["support"],
+  })
+  if (issue) {
+    githubIssueNumber = issue.number
+    githubIssueUrl = issue.url
+    await sb()
+      .from("support_tickets")
+      .update({ github_issue_number: issue.number, github_issue_url: issue.url })
+      .eq("id", row.id)
+  }
+
   // Notify super-admins that a ticket needs handling.
   const { data: admins } = await sb().from("users").select("id").eq("role", "SUPER_ADMIN")
   for (const a of admins ?? []) {
@@ -71,7 +103,10 @@ export async function POST(request: Request) {
       `/support?ticket=${row.id}`
     )
   }
-  return Response.json(row, { status: 201 })
+  return Response.json(
+    { ...row, github_issue_number: githubIssueNumber, github_issue_url: githubIssueUrl },
+    { status: 201 }
+  )
 }
 
 // DELETE /api/support { ids: string[] } | { all: true } — bulk delete tickets

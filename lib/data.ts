@@ -64,6 +64,10 @@ export const SEL = {
     "id,testCaseId:test_case_id,status,notes,runById:run_by_id,ticketId:ticket_id,createdAt:created_at",
   supportTicket:
     "id,subject,body,requesterEmail:requester_email,requesterId:requester_id,status,priority,workspaceId:workspace_id,assigneeId:assignee_id,resolvedById:resolved_by_id,resolvedAt:resolved_at,slaDueAt:sla_due_at,createdAt:created_at,updatedAt:updated_at",
+  // Adds the github_issue_* columns (support-github-issue.sql). Callers should
+  // fall back to `supportTicket` so the page still works before the migration.
+  supportTicketFull:
+    "id,subject,body,requesterEmail:requester_email,requesterId:requester_id,status,priority,workspaceId:workspace_id,assigneeId:assignee_id,resolvedById:resolved_by_id,resolvedAt:resolved_at,slaDueAt:sla_due_at,githubIssueNumber:github_issue_number,githubIssueUrl:github_issue_url,createdAt:created_at,updatedAt:updated_at",
   sprintSnapshot:
     "id,sprintId:sprint_id,day,remainingPoints:remaining_points,donePoints:done_points,capturedAt:captured_at",
   auditLog:
@@ -81,6 +85,27 @@ export async function getUsersMap(): Promise<Map<string, User>> {
   const map = new Map<string, User>()
   for (const u of (data ?? []) as User[]) map.set(u.id, u)
   return map
+}
+
+// Fetch support tickets including the github_issue_* columns when they exist,
+// degrading to the base projection if the support-github-issue.sql migration
+// hasn't been applied yet — so the support page never breaks on deploy order.
+export async function fetchSupportTickets(opts: {
+  isStaff: boolean
+  ownerId: string
+  ownerEmail: string
+  status?: string | null
+}): Promise<Record<string, unknown>[]> {
+  const build = (select: string) => {
+    let q = sb().from("support_tickets").select(select).order("created_at", { ascending: false })
+    if (opts.status) q = q.eq("status", opts.status)
+    if (!opts.isStaff) q = q.or(`requester_id.eq.${opts.ownerId},requester_email.ilike.${opts.ownerEmail}`)
+    return q
+  }
+  const full = await build(SEL.supportTicketFull)
+  if (!full.error) return (full.data ?? []) as unknown as Record<string, unknown>[]
+  const base = await build(SEL.supportTicket)
+  return (base.data ?? []) as unknown as Record<string, unknown>[]
 }
 
 export async function userById(id?: string | null): Promise<User | undefined> {

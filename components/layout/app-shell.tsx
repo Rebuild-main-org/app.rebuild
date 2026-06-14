@@ -246,7 +246,7 @@ export function AppShell({
     <div className="flex h-svh overflow-hidden bg-background">
       {/* Sidebar */}
       <aside ref={sidebarRef} className="bg-sidebar text-sidebar-foreground hidden w-60 shrink-0 flex-col border-r md:flex">
-        <div className="flex h-14 items-center border-b px-4">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b px-4 md:px-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="REBUILD" className="h-6 w-auto object-contain brightness-0 dark:invert" />
         </div>
@@ -306,7 +306,7 @@ export function AppShell({
       <Sheet open={mobileNav} onOpenChange={setMobileNav}>
         <SheetContent side="left" className="w-64 p-0">
           <div ref={mobileNavRef} className="contents">
-          <SheetTitle className="flex h-14 items-center border-b px-4">
+          <SheetTitle className="flex h-14 shrink-0 items-center border-b px-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png" alt="REBUILD" className="h-6 w-auto object-contain brightness-0 dark:invert" />
           </SheetTitle>
