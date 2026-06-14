@@ -61,7 +61,13 @@ REBUILD Engineering OS est la plateforme interne d'agence. Elle réunit :
 - **Intégrations optionnelles, dégradation propre.** Chaque service externe
   s'active selon ses variables d'env ; sinon le code *no-op* ou retombe sur
   Supabase, sans planter.
-- **i18n** : `en` / `fr` / `ar` (`lib/i18n.ts`, cookie `rebuild_lang`).
+- **i18n** : `en` / `fr` / `ar` (`lib/i18n.ts`). La langue **sauvegardée**
+  (préférences DB) fait foi côté serveur ; le cookie `rebuild_lang` n'est qu'un
+  chemin rapide de bascule.
+- **Préférences appliquées au chargement.** `PreferencesApplier` applique le
+  thème sauvegardé dans next-themes au montage (sinon un thème « Dark » stocké
+  n'était jamais appliqué) ; le bouton thème (topbar) et le raccourci `d`
+  persistent le choix en base (`persistTheme`).
 
 ---
 
@@ -107,6 +113,7 @@ next-app/
 | `GITHUB_TOKEN` | Données Git/PR/CI live (Octokit) | retombe sur les tables Supabase |
 | `GITHUB_WEBHOOK_SECRET` | Vérifie le webhook push/PR | webhook désactivé |
 | `GITHUB_DEFAULT_ORG` | Org des repos auto-créés (`Rebuild-main-org`) | défaut |
+| `SUPPORT_GITHUB_REPO` | Repo unique où les tickets de support ouvrent une issue | défaut `Rebuild-main-org/app.rebuild` |
 | `STORAGE_BUCKET` | Bucket Supabase Storage privé (uploads) | bytes stockés en base64 dans Postgres |
 | `REALTIME_BRIDGE` | `"supabase"` pour fan-out SSE multi-instances | mono-instance |
 | `RESEND_API_KEY` / `EMAIL_FROM` | Email sortant (Resend) | email no-op |
@@ -120,6 +127,8 @@ next-app/
 | `REBUILD_URL` | Base URL ciblée par le CLI | `http://localhost:3000` |
 | `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | Appels audio/vidéo Discord | appels désactivés |
 | `VERCEL_TOKEN` / `VERCEL_TEAM_ID` | Infos de déploiement Vercel | section vide |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` | Observabilité LLM (traces Langfuse) | tracing no-op, IA inchangée |
+| `LANGFUSE_CAPTURE_IO` | Capter le texte prompt/réponse (redacté) dans les traces | métadonnées seules (pas d'IO) |
 
 > **Déploiement Vercel — interdits** : ne pas mettre `output: "standalone"` ni
 > `"type":"module"` dans `package.json`. Combinés, ils provoquent
@@ -167,7 +176,9 @@ WorkspaceMember (user ↔ workspace, rôle local)
   `id, kind, label, category, amount, date, workspaceId?`.
 - **Support** — **SupportTicket** : `id, subject, body, requesterEmail,
   requesterId?, status, priority, workspaceId?, assigneeId?, resolvedById?,
-  resolvedAt?, slaDueAt?, …` + **SupportComment**.
+  resolvedAt?, slaDueAt?, githubIssueNumber?, githubIssueUrl?, …` +
+  **SupportComment**. (`githubIssue*` renseignés à la création via l'issue
+  GitHub auto-ouverte — voir §9.5.)
 - **Git (miroir GitHub)** — `GitCommit`, `PullRequest`, `Branch`, `Deployment`.
 - **Divers** — `User`, `Notification`, `Document`, `Meeting`, `AuditLog`,
   `CustomField`/`CustomFieldValue`.
@@ -269,7 +280,7 @@ Les défauts sont **surchargeables par ligne** dans la table
 
 | Service | Module | Activation | Capacités |
 |---|---|---|---|
-| **GitHub** | `lib/github.ts` (Octokit) | `GITHUB_TOKEN` | `ensureRepo`/`seedDefaultCI`, branches, commits (live, multi-branches, par auteur), PR (open/update/merge/diff/checks), revues, releases, branch protection, Actions (runs/rerun/cancel), webhooks, lecture/écriture de fichiers (IDE), `ghCompareDiff` pour la revue IA, appartenance org (gate du sign-in GitHub) |
+| **GitHub** | `lib/github.ts` (Octokit) | `GITHUB_TOKEN` | `ensureRepo`/`seedDefaultCI`, branches, commits (live, multi-branches, par auteur), PR (open/update/merge/diff/checks), revues, releases, branch protection, Actions (runs/rerun/cancel), webhooks, lecture/écriture de fichiers (IDE), `ghCompareDiff` pour la revue IA, `ghCreateIssue` (issue auto à l'ouverture d'un ticket de support, best-effort), appartenance org (gate du sign-in GitHub) |
 | **Supabase** | `lib/supabase/*`, `lib/data.ts` | URL + clés | Auth (cookies, anon) + Postgres (service-role) |
 | **Anthropic** | `lib/ai.ts` | `ANTHROPIC_API_KEY` *ou clé perso* | features IA (§7) |
 | **Stripe** | `lib/stripe.ts` | clés Stripe | checkout facture, webhook → `PAID` |
@@ -311,8 +322,21 @@ déterministes (l'app reste fonctionnelle).
 | Changelog | `changelogFromPRs()` | — | texte | `POST /api/ai/changelog` |
 | Résumé | `summarize()` | — | texte | `POST /api/ai/summary` |
 
+**Observabilité LLM (Langfuse, optionnelle & fail-safe)** : toute
+l'instrumentation vit dans les **deux points de passage existants**, jamais dans
+le code des features. `withAi()` ouvre une **trace** (feature, user, workspace,
+project) ; `trackedCreate()` enregistre une **generation** (modèle, tokens, coût
+calculé, latence, hash de version de prompt, IO redacté optionnel) ; les appels
+d'outils MCP deviennent des **spans** imbriqués (via `LANGFUSE_TRACE_ID`). Le SDK
+n'est touché que dans `lib/observability/langfuse.ts` (singleton paresseux + stub
+no-op) ; sans `LANGFUSE_*`, comportement IA **identique** au byte près. Un
+`traceId` stable est généré dans `withAi` (même tracing désactivé) et renvoyé à
+l'UI (`currentTraceId`) pour y rattacher le feedback humain. Détails :
+`observability/README.md`.
+
 **Gouvernance** (`lib/ai-usage.ts`) : contexte `AsyncLocalStorage` (`withAi`,
-`recordAiUsage`, `currentApiKey`, `userAnthropicKey`), table `ai_usage`
+`recordAiUsage`, `currentApiKey`, `userAnthropicKey`, `currentTrace`,
+`currentTraceId`), table `ai_usage`
 (feature, model, tokens, coût, workspace_id, project_id), plafond budgétaire
 par-utilisateur, agrégats `aiUsageSummary` / `workspaceAiSpend` /
 `estimationAccuracy`. Prompts versionnés sous `prompts/` (+ schémas JSON dans
@@ -428,6 +452,14 @@ PDF : `/api/finance/[id]/pdf`. Conversion du lead → delivery/workspace :
 Le demandeur ne voit que ses tickets ; le staff (`support.view`) voit tout ;
 seul le SUPER_ADMIN résout (`support.resolve`) et diffuse des avis
 (`notify.broadcast`). `slaDueAt` matérialise l'échéance SLA.
+**Issue GitHub automatique** : à la création d'un ticket, `POST /api/support`
+ouvre — **best-effort** — une issue `[Support] <sujet>` (label `support`, corps
+= description + demandeur/priorité/workspace + lien retour vers le ticket) dans
+le repo `SUPPORT_GITHUB_REPO`, et stocke `githubIssueNumber`/`githubIssueUrl`
+sur le ticket (chip cliquable dans la liste). Une panne GitHub (ou `GITHUB_TOKEN`
+absent) **ne bloque jamais** la création du ticket. Les lectures dégradent
+proprement (`fetchSupportTickets` retombe sur la projection de base) si la
+migration `support-github-issue.sql` n'est pas encore appliquée.
 
 ### 9.6 Scaffold depuis architecture
 `POST /api/workspaces/[id]/scaffold` : `preview:true` → renvoie le plan
@@ -471,7 +503,7 @@ notifications, présence, i18n, applicateur de préférences).
 | `/rebuild216` | tous | guide CLI + commandes prêtes à coller pour les projets accessibles. |
 | `/how-to-use` | tous | mode d'emploi de la plateforme. |
 | `/profile` | tous | identité, avatar, **Connect with Claude** (clé Anthropic perso), MFA, export RGPD. |
-| `/settings` | tous | préférences : thème, densité, langue, accent, disponibilité, skills/tags, DND… |
+| `/settings` | tous | préférences : thème, densité, langue, accent, disponibilité, skills/tags, DND… (thème + langue **appliqués au chargement** et persistés en base — voir §1). |
 | `/admin` | `admin.panel` | utilisateurs & rôles, permissions de sections, **Modèle IA plateforme** + **Modèle IA CLI** (SUPER_ADMIN), **Devis & factures** (créer / changer le statut / **supprimer** ADMIN+SUPER_ADMIN), charges & revenus, agents & agent-docs, usage IA, diffusion d'avis (SUPER_ADMIN). |
 | `/admin/audit` | `admin.panel` | 1000 dernières lignes d'`audit_logs` (résolution des noms). |
 
@@ -486,7 +518,7 @@ notifications, présence, i18n, applicateur de préférences).
 | `…/git` | Git & CI/CD : branches, commits, PR (revue/merge), déploiements, état CI (Actions). |
 | `…/chat` | chat d'équipe de l'espace (`TeamChat`, temps réel). |
 | `…/documents` | fichiers partagés (contrats, specs, assets). |
-| `…/calendar` | agenda : échéances tickets, sprints, milestones, réunions (export ICS). |
+| `…/calendar` | **vue mensuelle** (grille `MonthGrid` : échéances tickets, fins de sprint, milestones, navigation mois ± / aujourd'hui) + agenda + réunions (export ICS). |
 | `…/settings` | membres + configuration de l'espace (repo, technos, lien portail, agent…). |
 
 ### 10.4 Projet `/workspace/[id]/projects/[pid]`
@@ -625,7 +657,7 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 ### 11.8 Support
 | Route | Méthodes | Comportement |
 |---|---|---|
-| `support` | GET, POST, DELETE | liste / création / suppression |
+| `support` | GET, POST, DELETE | liste / création (**ouvre une issue GitHub best-effort**) / suppression |
 | `support/[id]` | PATCH, DELETE | statut / suppression |
 | `support/[id]/comments` | GET, POST | fil de discussion |
 
@@ -675,7 +707,7 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 
 | Module | Rôle |
 |---|---|
-| `data.ts` | client service-role `sb()`, `SEL` (alias colonnes), prefs, annuaire users |
+| `data.ts` | client service-role `sb()`, `SEL` (alias colonnes), prefs, annuaire users, `fetchSupportTickets` (lecture support résiliente : retombe sur la projection de base si la migration issue-link manque) |
 | `queries.ts` | sélecteurs lecture (workspaces, projets, tickets, sprints, vélocité, forecast, burndown, repo files…) |
 | `mutations.ts` | écritures : tickets/commentaires/liens/watchers, projets, fichiers/commits/branches, temps, `audit`, `createNotification`, `uniqueShortCode` |
 | `auth.ts` | `can()`, `isAdmin()`, MATRIX, tiers |
@@ -685,7 +717,8 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 | `cli-auth.ts` | `userFromBearer`, mint/résolution des CLI tokens (rbld_), heartbeat |
 | `github.ts` | toute l'intégration GitHub (Octokit) |
 | `ai.ts` | features IA + `trackedCreate` (résout le modèle actif) + schémas JSON |
-| `ai-usage.ts` | gouvernance/coûts IA (ALS, budget, agrégats) |
+| `ai-usage.ts` | gouvernance/coûts IA (ALS, budget, agrégats) + cycle de vie de la trace d'observabilité (`withAi`, `currentTrace`, `currentTraceId`) |
+| `observability/langfuse.ts` | seul point de contact du SDK Langfuse : singleton paresseux + stub no-op, `startTrace`/`scoreTrace`/`flushObservability`, redaction |
 | `blueprints.ts` / `blueprint-types.ts` | Phase A : data access (service-role) + `validateSpec`, gates, conversion ; types/constantes client-safe |
 | `settings.ts` | réglages plateforme (`app_settings`) : modèle IA serveur (`getAiModel`/`setAiModel`) + modèle CLI (`getCliModel`/`setCliModel`), `AI_MODELS` |
 | `analytics.ts` / `dora.ts` | analytics (global/ingénieur/workspace) + DORA |
@@ -715,8 +748,9 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 **`app-settings.sql`** (réglages plateforme : modèle IA),
 **`blueprints.sql`** (Phase A — Conception),
 `project-groups.sql`, `crm-fixes.sql`, `discord*.sql`, `agents*.sql`,
-`time-tracking.sql`, `qa-support.sql`, `custom-fields.sql`, `vercel.sql`,
-`super-admin.sql`, `admin-user.sql`.
+`time-tracking.sql`, `qa-support.sql`, **`support-github-issue.sql`**
+(colonnes `github_issue_number`/`github_issue_url` du lien ticket↔issue),
+`custom-fields.sql`, `vercel.sql`, `super-admin.sql`, `admin-user.sql`.
 
 ### Déploiement (Vercel)
 - Build Turbopack. **Ne pas** activer `output: "standalone"` ni

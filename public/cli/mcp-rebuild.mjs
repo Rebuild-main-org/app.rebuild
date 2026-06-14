@@ -17,10 +17,34 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 
-const URL_BASE = process.env.REBUILD_URL || "http://localhost:3000"
+const URL_BASE = process.env.REBUILD_URL
 let TOKEN = process.env.REBUILD_TOKEN || ""
 let REFRESH = process.env.REBUILD_REFRESH_TOKEN || ""
 const PROJECT = process.env.REBUILD_PROJECT || ""
+
+// Optional observability: nest each tool call as a Langfuse span under the
+// agent-run trace (env LANGFUSE_TRACE_ID, set by rebuild216). FULLY best-effort
+// — a dynamic import means a missing `langfuse` dep or missing keys is a silent
+// no-op that can never affect tool behavior. IO is captured only when opted in.
+const LF_CAPTURE_IO = process.env.LANGFUSE_CAPTURE_IO === "1" || process.env.LANGFUSE_CAPTURE_IO === "true"
+let _lf = null
+let _lfTried = false
+async function lfClient() {
+  if (_lfTried) return _lf
+  _lfTried = true
+  if (!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY) return null
+  try {
+    const { Langfuse } = await import("langfuse")
+    _lf = new Langfuse({
+      publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+      secretKey: process.env.LANGFUSE_SECRET_KEY,
+      baseUrl: process.env.LANGFUSE_HOST || undefined,
+    })
+  } catch {
+    _lf = null
+  }
+  return _lf
+}
 
 // Exchange the refresh token for a fresh access token (Supabase access tokens
 // are short-lived; long agent runs outlive them). Returns true on success.
@@ -194,7 +218,7 @@ const server = new Server({ name: "rebuild", version: "1.0.0" }, { capabilities:
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
+async function callTool(req) {
   const { name, arguments: args = {} } = req.params
   try {
     if (name === "list_tickets") {
@@ -272,6 +296,44 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     return { content: [{ type: "text", text: `Unknown tool ${name}` }], isError: true }
   } catch (e) {
     return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true }
+  }
+}
+
+// Dispatch with an optional observability span around every tool call.
+server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  const lf = await lfClient()
+  const traceId = process.env.LANGFUSE_TRACE_ID
+  let span = null
+  if (lf && traceId) {
+    try {
+      span = lf
+        .trace({ id: traceId })
+        .span({ name: `tool:${req.params.name}`, input: LF_CAPTURE_IO ? req.params.arguments : undefined })
+    } catch {
+      span = null
+    }
+  }
+  try {
+    const res = await callTool(req)
+    if (span) {
+      try {
+        span.end({ level: res?.isError ? "ERROR" : undefined })
+        await lf.flushAsync()
+      } catch {
+        /* best-effort */
+      }
+    }
+    return res
+  } catch (e) {
+    if (span) {
+      try {
+        span.end({ level: "ERROR", statusMessage: e?.message })
+        await lf.flushAsync()
+      } catch {
+        /* best-effort */
+      }
+    }
+    throw e
   }
 })
 

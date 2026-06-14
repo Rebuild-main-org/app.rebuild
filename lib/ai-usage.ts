@@ -5,6 +5,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 
 import { sb, getUsersMap } from "./data"
 import { isAdmin } from "./auth"
+import { startTrace, flushObservability, type ObsTrace } from "./observability/langfuse"
 import type { Role } from "./types"
 
 // Price per 1M tokens (USD), input/output. Default to Opus pricing.
@@ -51,6 +52,8 @@ interface AiCtx {
   workspaceId?: string
   projectId?: string
   apiKey?: string // the caller's own Anthropic key (« Connect with Claude »)
+  traceId?: string // stable id for this AI action — returned to the UI for feedback
+  trace?: ObsTrace // Langfuse trace (a no-op stub when observability is disabled)
 }
 const store = new AsyncLocalStorage<AiCtx>()
 
@@ -58,6 +61,19 @@ const store = new AsyncLocalStorage<AiCtx>()
 // key when present, else undefined (callers fall back to the server key).
 export function currentApiKey(): string | undefined {
   return store.getStore()?.apiKey
+}
+
+// The observability trace for the current AI action (trackedCreate adds a
+// generation under it). Undefined outside a withAi scope.
+export function currentTrace(): ObsTrace | undefined {
+  return store.getStore()?.trace
+}
+
+// The stable trace id for the current AI action — routes read this AFTER the AI
+// call resolves and return it to the client so feedback can attach to it. Exists
+// whether or not Langfuse is enabled.
+export function currentTraceId(): string | undefined {
+  return store.getStore()?.traceId
 }
 
 // A user's connected Anthropic key (« Connect with Claude »), or undefined.
@@ -175,9 +191,26 @@ export async function withAi<T>(
     const cap = aiMonthlyBudget()
     if (spent >= cap) throw new AiBudgetError(spent, cap)
   }
+  // One trace per user-facing AI action. The id is generated here (not by the
+  // SDK) so it exists even when Langfuse is off and can be returned to the UI.
+  const traceId = randomUUID()
+  const trace = startTrace({
+    id: traceId,
+    name: feature,
+    userId: user.id,
+    metadata: { workspaceId: scope.workspaceId, projectId: scope.projectId },
+    tags: [feature],
+  })
   return store.run(
-    { userId: user.id, feature, workspaceId: scope.workspaceId, projectId: scope.projectId, apiKey },
-    fn
+    { userId: user.id, feature, workspaceId: scope.workspaceId, projectId: scope.projectId, apiKey, traceId, trace },
+    async () => {
+      try {
+        return await fn()
+      } finally {
+        // Flush is best-effort and never blocks/breaks the AI result.
+        void flushObservability()
+      }
+    }
   )
 }
 
