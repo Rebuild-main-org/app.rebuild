@@ -18,6 +18,7 @@ import path from "node:path"
 import readline from "node:readline"
 import { spawn, spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
+import { randomUUID } from "node:crypto"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const URL_BASE = process.env.REBUILD_URL || "https://next-app-maaref.vercel.app"
@@ -471,6 +472,18 @@ function agentOptions(workDir, cfg, project, resume) {
   const maxTurns = numOpt(cfg, "REBUILD_MAX_TURNS", "maxTurns")
   const maxBudgetUsd = numOpt(cfg, "REBUILD_MAX_BUDGET_USD", "maxBudgetUsd")
   const taskBudgetTokens = numOpt(cfg, "REBUILD_TASK_BUDGET_TOKENS", "taskBudgetTokens")
+  // One observability trace per agent run; MCP tool spans nest under it. Only
+  // forwarded when LANGFUSE_* is set — otherwise the MCP server no-ops.
+  const traceId = randomUUID()
+  const lfEnv = process.env.LANGFUSE_PUBLIC_KEY
+    ? {
+        LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
+        LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY || "",
+        LANGFUSE_HOST: process.env.LANGFUSE_HOST || "",
+        LANGFUSE_CAPTURE_IO: process.env.LANGFUSE_CAPTURE_IO || "",
+        LANGFUSE_TRACE_ID: traceId,
+      }
+    : {}
   return {
     cwd: workDir,
     permissionMode: "bypassPermissions",
@@ -505,6 +518,7 @@ function agentOptions(workDir, cfg, project, resume) {
           REBUILD_TOKEN: cfg.token,
           REBUILD_REFRESH_TOKEN: cfg.refreshToken || "",
           REBUILD_PROJECT: project,
+          ...lfEnv,
         },
       },
     },

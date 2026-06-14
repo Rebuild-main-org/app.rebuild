@@ -2,9 +2,12 @@
 // If ANTHROPIC_API_KEY is missing or a call fails, callers get a thrown error
 // (surfaced as 503) instead of a simulated response.
 
+import { createHash } from "crypto"
+
 import Anthropic from "@anthropic-ai/sdk"
 
-import { currentApiKey, recordAiUsage } from "./ai-usage"
+import { currentApiKey, currentTrace, recordAiUsage, costUsd } from "./ai-usage"
+import { captureIo, redact } from "./observability/langfuse"
 import { getAiModel, getCheapAiModel } from "./settings"
 import { loadSystemPrompt } from "./doc-loader"
 import type { SpecForm, SpecRevision } from "./blueprint-types"
@@ -39,7 +42,18 @@ function getClient(): Anthropic {
 // docs) — same work, a fraction of the cost.
 export type ModelTier = "smart" | "cheap"
 
-// Every model call goes through here so usage/cost is logged for governance.
+// Stable per-prompt fingerprint, so traces can be grouped/compared by prompt
+// without threading a version arg through every feature (keeps the single
+// choke point clean). Hash of the system prompt the call was built with.
+function promptVersionOf(system: unknown): string | undefined {
+  if (!system) return undefined
+  const text = typeof system === "string" ? system : JSON.stringify(system)
+  return "sys-" + createHash("sha256").update(text).digest("hex").slice(0, 12)
+}
+
+// Every model call goes through here so usage/cost is logged for governance AND
+// an observability `generation` is recorded under the current trace (a no-op
+// when Langfuse is disabled — see lib/observability/langfuse.ts).
 async function trackedCreate(
   params: Anthropic.Messages.MessageCreateParamsNonStreaming,
   opts: { tier?: ModelTier } = {}
@@ -51,9 +65,37 @@ async function trackedCreate(
   // The active model is a runtime setting a SUPER_ADMIN can change for everyone;
   // cheap-tier calls resolve the (also admin-configurable) Haiku-class model.
   const model = opts.tier === "cheap" ? await getCheapAiModel() : await getAiModel()
-  const res = await client.messages.create({ ...params, model })
-  await recordAiUsage(model, res.usage)
-  return res
+
+  const gen = currentTrace()?.generation({
+    name: "generation",
+    model,
+    input: captureIo() ? redact(params.messages) : undefined,
+    promptVersion: promptVersionOf(params.system),
+  })
+  try {
+    const res = await client.messages.create({ ...params, model })
+    await recordAiUsage(model, res.usage)
+    const inTok = res.usage?.input_tokens ?? 0
+    const outTok = res.usage?.output_tokens ?? 0
+    gen?.end({
+      output: captureIo() ? redact(res.content) : undefined,
+      inputTokens: inTok,
+      outputTokens: outTok,
+      costUsd: Number(
+        costUsd(
+          model,
+          inTok,
+          outTok,
+          res.usage?.cache_read_input_tokens ?? 0,
+          res.usage?.cache_creation_input_tokens ?? 0
+        ).toFixed(6)
+      ),
+    })
+    return res
+  } catch (e) {
+    gen?.end({ error: true, statusMessage: e instanceof Error ? e.message : "AI call failed" })
+    throw e
+  }
 }
 
 // Cache-friendly system prompt block (prompt caching).
