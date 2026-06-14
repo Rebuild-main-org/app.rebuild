@@ -165,6 +165,33 @@ export function scoreTrace(traceId: string, score: number, note?: string): void 
   }
 }
 
+// Read a trace's IO back from Langfuse (for the curated-dataset export). Returns
+// the representative generation's input/output + promptVersion, or null if
+// Langfuse is off / the trace isn't found / IO wasn't captured. Best-effort.
+export async function fetchTraceIO(
+  traceId: string
+): Promise<{ feature?: string; promptVersion?: string; input?: unknown; output?: unknown } | null> {
+  const c = rawClient()
+  if (!c) return null
+  try {
+    const { data } = await c.fetchTrace(traceId)
+    const t = data as unknown as {
+      name?: string
+      observations?: Array<{ type?: string; input?: unknown; output?: unknown; metadata?: Record<string, unknown> | null }>
+    }
+    const obs = t.observations ?? []
+    const gen = obs.find((o) => o.type === "GENERATION") ?? obs[0]
+    return {
+      feature: t.name,
+      promptVersion: (gen?.metadata?.promptVersion as string) ?? undefined,
+      input: gen?.input,
+      output: gen?.output,
+    }
+  } catch {
+    return null
+  }
+}
+
 // Flush buffered events (best-effort). Called after an AI action completes.
 export async function flushObservability(): Promise<void> {
   const c = client

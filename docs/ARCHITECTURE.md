@@ -364,6 +364,7 @@ rebuild216 <project>             # projet nommé, puis le mode
 rebuild216 chat [project]        # direct chat + MCP
 rebuild216 -ops                  # intégrer des branches prêtes → PR + revue IA
 rebuild216 key <sk-...>          # clé Anthropic centrale (sinon `claude login`); --clear
+rebuild216 ai:export-dataset     # export JSONL du dataset curé IA (admin ; --feature/--workspace/--since/--min-score/--out)
 ```
 
 ### Modes
@@ -575,6 +576,7 @@ utilisent `userFromBearer` (Bearer), pas les cookies.
 | `cli/ticket/create` | POST | crée un ticket complet (backlog) |
 | `cli/document`, `cli/document/[id]` | POST / GET | upload / lecture (ex. screenshots) |
 | `cli/usage` | POST | enregistre le coût IA d'un run |
+| `cli/dataset` | GET | export JSONL du dataset curé (feedback ⋈ traces Langfuse), gate `ai.traces.read` — `rebuild216 ai:export-dataset` |
 
 ### 11.3 Tickets, projets, QA, temps
 | Route | Méthodes | Auth | Comportement |
