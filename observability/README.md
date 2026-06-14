@@ -5,6 +5,13 @@ LLM observability for REBUILD Engineering OS. **Optional and fail-safe**: with n
 features behave byte-for-byte as without it (same doctrine as Slack/Stripe/Vercel
 integrations). Nothing here changes AI behavior; it only observes.
 
+> **Best practices** follow the official [Langfuse skill](https://github.com/langfuse/skills)
+> (`.claude/skills/langfuse`): descriptive trace/generation names, model + token
+> usage on every generation (auto-cost), nested spans, PII masked (off by
+> default), `flush()` after each action, `user_id` + `feature` tags, `session_id`
+> on the multi-turn copilot, and feedback as a `user-thumbs` score with an
+> explicit `dataType`.
+
 ## Architecture
 
 All instrumentation lives in the **two existing AI choke points** — never in

@@ -90,6 +90,7 @@ export function startTrace(args: {
   id: string
   name: string
   userId?: string
+  sessionId?: string
   metadata?: Record<string, unknown>
   tags?: string[]
 }): ObsTrace {
@@ -100,6 +101,7 @@ export function startTrace(args: {
       id: args.id,
       name: args.name,
       userId: args.userId,
+      sessionId: args.sessionId,
       metadata: args.metadata,
       tags: args.tags,
     })
@@ -155,11 +157,13 @@ export function startTrace(args: {
 }
 
 // Attach a human feedback score to a trace (Langfuse). No-op when disabled.
+// Per Langfuse best practice: the name reflects the signal source (not a generic
+// "feedback"), and the dataType is set explicitly (our score is -1/0/1 → NUMERIC).
 export function scoreTrace(traceId: string, score: number, note?: string): void {
   const c = rawClient()
   if (!c) return
   try {
-    c.score({ traceId, name: "user-feedback", value: score, comment: note || undefined })
+    c.score({ traceId, name: "user-thumbs", value: score, dataType: "NUMERIC", comment: note || undefined })
   } catch {
     /* best-effort */
   }
