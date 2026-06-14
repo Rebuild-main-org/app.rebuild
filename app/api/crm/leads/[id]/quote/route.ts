@@ -20,13 +20,18 @@ export async function POST(
   if (!lead) return Response.json({ error: "Lead not found" }, { status: 404 })
 
   try {
-    const draft = await withAi(auth, "quote", () =>
-      quoteFromLead({
-        company: lead.company,
-        notes: lead.notes ?? "",
-        targetValue: lead.value,
-        currency: lead.currency || "TND",
-      })
+    const traceRef: { id?: string } = {}
+    const draft = await withAi(
+      auth,
+      "quote",
+      () =>
+        quoteFromLead({
+          company: lead.company,
+          notes: lead.notes ?? "",
+          targetValue: lead.value,
+          currency: lead.currency || "TND",
+        }),
+      { workspaceId: lead.workspaceId, traceRef }
     )
     const year = new Date().getFullYear()
     const { count } = await sb().from("finance_docs").select("id", { count: "exact", head: true }).eq("kind", "QUOTE")
@@ -47,7 +52,7 @@ export async function POST(
     }
     const { error } = await sb().from("finance_docs").insert(row)
     if (error) return Response.json({ error: error.message }, { status: 400 })
-    return Response.json(row, { status: 201 })
+    return Response.json({ ...row, traceId: traceRef.id }, { status: 201 })
   } catch (e) {
     if (e instanceof AiBudgetError) return Response.json({ error: e.message }, { status: 429 })
     if (e instanceof AINotConfiguredError) return Response.json({ error: e.message }, { status: 503 })

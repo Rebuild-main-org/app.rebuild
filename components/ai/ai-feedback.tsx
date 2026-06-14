@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { ThumbsUp, ThumbsDown, Check } from "lucide-react"
+import { ThumbsUp, ThumbsDown, Check, X } from "lucide-react"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -58,10 +59,7 @@ export function AiFeedback({
           type="button"
           aria-label="Helpful"
           onClick={() => send(score === 1 ? 0 : 1)}
-          className={cn(
-            "hover:text-foreground rounded p-1 transition-colors",
-            score === 1 && "text-emerald-500"
-          )}
+          className={cn("hover:text-foreground rounded p-1 transition-colors", score === 1 && "text-emerald-500")}
         >
           <ThumbsUp className="size-3.5" />
         </button>
@@ -72,10 +70,7 @@ export function AiFeedback({
             setScore(-1)
             setNoteOpen(true)
           }}
-          className={cn(
-            "hover:text-foreground rounded p-1 transition-colors",
-            score === -1 && "text-red-500"
-          )}
+          className={cn("hover:text-foreground rounded p-1 transition-colors", score === -1 && "text-red-500")}
         >
           <ThumbsDown className="size-3.5" />
         </button>
@@ -96,5 +91,46 @@ export function AiFeedback({
         </div>
       )}
     </div>
+  )
+}
+
+// Transient AI outputs (e.g. CRM quote generation) have no persistent surface to
+// host a widget — so surface the result as a dismissable toast that still
+// carries the same <AiFeedback> control. The reusable pattern for toast-only
+// AI features.
+export function toastAiResult(opts: {
+  title: string
+  description?: string
+  traceId?: string
+  feature: string
+  workspaceId?: string
+}) {
+  toast.custom(
+    (id) => (
+      <div className="bg-popover text-popover-foreground w-[22rem] max-w-[calc(100vw-2rem)] rounded-lg border p-3 shadow-lg">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">{opts.title}</p>
+            {opts.description && <p className="text-muted-foreground mt-0.5 text-xs">{opts.description}</p>}
+          </div>
+          <button
+            onClick={() => toast.dismiss(id)}
+            aria-label="Dismiss"
+            className="text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+        {opts.traceId && (
+          <AiFeedback
+            className="mt-2"
+            traceId={opts.traceId}
+            feature={opts.feature}
+            workspaceId={opts.workspaceId}
+          />
+        )}
+      </div>
+    ),
+    { duration: 15000 }
   )
 }
