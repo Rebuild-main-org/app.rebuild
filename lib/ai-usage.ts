@@ -191,7 +191,7 @@ export async function withAi<T>(
   // id synchronously, so a route can read it AFTER withAi resolves (the ALS
   // store is only live during the callback). Non-breaking — existing callers
   // pass nothing.
-  scope: { workspaceId?: string; projectId?: string; traceRef?: { id?: string } } = {}
+  scope: { workspaceId?: string; projectId?: string; sessionId?: string; traceRef?: { id?: string } } = {}
 ): Promise<T> {
   // The user's own connected Anthropic key (« Connect with Claude »). When set,
   // their calls run on their account — so they're exempt from the server budget.
@@ -212,6 +212,7 @@ export async function withAi<T>(
     id: traceId,
     name: feature,
     userId: user.id,
+    sessionId: scope.sessionId,
     metadata: { workspaceId: scope.workspaceId, projectId: scope.projectId },
     tags: [feature],
   })

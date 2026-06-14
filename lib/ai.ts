@@ -70,7 +70,7 @@ async function trackedCreate(
   const feature = currentFeature() ?? "chat"
   const workspace = currentWorkspaceId()
   const gen = currentTrace()?.generation({
-    name: "generation",
+    name: feature, // descriptive (Langfuse best practice) — not a generic name
     model,
     input: captureIo() ? redact(params.messages) : undefined,
     promptVersion: promptVersionOf(params.system),

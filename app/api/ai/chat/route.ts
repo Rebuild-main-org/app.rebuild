@@ -21,6 +21,7 @@ export async function POST(request: Request) {
     page?: string
     workspaceId?: string
     projectId?: string
+    sessionId?: string
     extraContext?: string
   }
   if (!body.message?.trim()) {
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
           history: (body.history ?? []).slice(-8),
           message,
         }),
-      { workspaceId: body.workspaceId, projectId: body.projectId, traceRef }
+      { workspaceId: body.workspaceId, projectId: body.projectId, sessionId: body.sessionId, traceRef }
     )
     return Response.json({ reply, traceId: traceRef.id })
   } catch (e) {

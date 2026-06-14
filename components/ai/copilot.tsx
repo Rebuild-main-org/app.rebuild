@@ -26,6 +26,8 @@ export function Copilot() {
   const [draft, setDraft] = useState("")
   const [busy, setBusy] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
+  // Stable per-conversation id so Langfuse groups this chat in the Sessions view.
+  const sessionId = useRef<string>(crypto.randomUUID())
 
   // Derive context from the current route.
   const context = useMemo(() => {
@@ -59,6 +61,7 @@ export function Copilot() {
           page: context.page,
           workspaceId: context.workspaceId,
           projectId: context.projectId,
+          sessionId: sessionId.current,
         }),
       })
       const data = await res.json()
