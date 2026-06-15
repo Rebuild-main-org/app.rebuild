@@ -17,6 +17,7 @@ import {
   type TicketPriority,
 } from "@/lib/types"
 import { pluralize } from "@/lib/utils"
+import { REPORT_TYPES, DEFAULT_REPORT_TYPE, reportType, type ReportType } from "@/lib/support"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -79,8 +80,17 @@ export function SupportView({
   const [filter, setFilter] = useState<SupportStatus | "ALL">("ALL")
   const [open, setOpen] = useState(false)
   const [subject, setSubject] = useState("")
-  const [body, setBody] = useState("")
+  const [type, setType] = useState<ReportType>(DEFAULT_REPORT_TYPE)
+  const [body, setBody] = useState(reportType(DEFAULT_REPORT_TYPE).template)
   const [priority, setPriority] = useState<TicketPriority>("MEDIUM")
+
+  // Switching the report type swaps in its template — but only when the user
+  // hasn't typed their own content yet (don't clobber edits).
+  function pickType(next: ReportType) {
+    setType(next)
+    const prevTemplate = reportType(type).template
+    if (!body.trim() || body === prevTemplate) setBody(reportType(next).template)
+  }
   const [saving, setSaving] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -102,15 +112,16 @@ export function SupportView({
     const r = await fetch("/api/support", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject, body, priority }),
+      body: JSON.stringify({ subject, body, priority, reportType: type }),
     })
     setSaving(false)
     if (!r.ok) return toast.error((await r.json().catch(() => ({}))).error ?? "Failed")
     setOpen(false)
     setSubject("")
-    setBody("")
+    setType(DEFAULT_REPORT_TYPE)
+    setBody(reportType(DEFAULT_REPORT_TYPE).template)
     setPriority("MEDIUM")
-    toast.success("Ticket opened")
+    toast.success("Ticket opened — a GitHub issue was created")
     router.refresh()
   }
 
@@ -178,19 +189,43 @@ export function SupportView({
           <DialogContent>
             <DialogHeader>
               <DialogTitle>New support ticket</DialogTitle>
-              <DialogDescription>A super-admin will review and respond.</DialogDescription>
+              <DialogDescription>
+                Pick a report type — we&apos;ll prefill a template and open a GitHub issue on submit.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <Input placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
-              <Textarea placeholder="Describe your issue" value={body} onChange={(e) => setBody(e.target.value)} rows={4} />
-              <Select value={priority} onValueChange={(v) => setPriority(v as TicketPriority)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PRIORITIES.map((p) => (
-                    <SelectItem key={p} value={p}>{PRIORITY_META[p].label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground text-xs">Report type</label>
+                  <Select value={type} onValueChange={(v) => pickType(v as ReportType)}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {REPORT_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground text-xs">Priority</label>
+                  <Select value={priority} onValueChange={(v) => setPriority(v as TicketPriority)}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PRIORITIES.map((p) => (
+                        <SelectItem key={p} value={p}>{PRIORITY_META[p].label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Textarea
+                placeholder="Describe your issue"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={10}
+                className="font-mono text-xs"
+              />
               <Button onClick={create} disabled={saving || !subject.trim()} className="w-full">
                 {saving && <Loader2 className="size-4 animate-spin" />} Create
               </Button>

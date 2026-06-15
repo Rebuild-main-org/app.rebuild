@@ -452,9 +452,15 @@ PDF : `/api/finance/[id]/pdf`. Conversion du lead → delivery/workspace :
 Le demandeur ne voit que ses tickets ; le staff (`support.view`) voit tout ;
 seul le SUPER_ADMIN résout (`support.resolve`) et diffuse des avis
 (`notify.broadcast`). `slaDueAt` matérialise l'échéance SLA.
+**Types de rapport + templates** (`lib/support.ts`, source unique partagée
+formulaire ↔ API) : à l'ouverture, l'utilisateur choisit un **type** (Bug,
+Feature, Question, Performance, Billing, Other) ; chaque type **pré-remplit un
+template markdown** dans le corps (sans écraser une saisie) et mappe vers des
+**labels GitHub** + un tag de titre.
 **Issue GitHub automatique** : à la création d'un ticket, `POST /api/support`
-ouvre — **best-effort** — une issue `[Support] <sujet>` (label `support`, corps
-= description + demandeur/priorité/workspace + lien retour vers le ticket) dans
+ouvre — **best-effort** — une issue `[Support · <Type>] <sujet>` (labels
+`support` + ceux du type, corps = template rempli + type/demandeur/priorité/
+workspace + lien retour vers le ticket) dans
 le repo `SUPPORT_GITHUB_REPO`, et stocke `githubIssueNumber`/`githubIssueUrl`
 sur le ticket (chip cliquable dans la liste). Une panne GitHub (ou `GITHUB_TOKEN`
 absent) **ne bloque jamais** la création du ticket. Les lectures dégradent
