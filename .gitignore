@@ -38,3 +38,4 @@ next-env.d.ts
 
 # CLI standalone deps
 cli/node_modules
+med-tn
