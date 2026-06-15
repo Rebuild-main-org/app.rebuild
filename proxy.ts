@@ -1,6 +1,14 @@
-// Auth middleware: refreshes the Supabase session cookie on every request and
-// redirects unauthenticated users to /login. Public paths (login, OAuth
-// callback, the client portal, auth/webhook APIs, static assets) are exempt.
+// Auth proxy (Next.js 16 — formerly middleware.ts). Refreshes the Supabase
+// session cookie on every request and redirects unauthenticated users to
+// /login. Public paths (login, OAuth callback, the client portal, auth/webhook
+// APIs, static assets) are exempt.
+//
+// IMPORTANT: this is `proxy.ts`, NOT `middleware.ts`. In Next 16 the proxy
+// convention runs on the **Node.js runtime** by default, whereas the legacy
+// middleware ran on the **Edge runtime** — where `@supabase/ssr` crashed at
+// invocation (MIDDLEWARE_INVOCATION_FAILED) and `@/lib/ratelimit` was rejected
+// at build time ("unsupported modules"). Running on Node fixes both, so the
+// per-user rate-limit is restored here.
 
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
@@ -24,7 +32,7 @@ function isPublic(pathname: string): boolean {
   )
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 

@@ -114,14 +114,21 @@ export function SupportView({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subject, body, priority, reportType: type }),
     })
+    const data = await r.json().catch(() => ({}))
     setSaving(false)
-    if (!r.ok) return toast.error((await r.json().catch(() => ({}))).error ?? "Failed")
+    if (!r.ok) return toast.error(data.error ?? "Failed")
     setOpen(false)
     setSubject("")
     setType(DEFAULT_REPORT_TYPE)
     setBody(reportType(DEFAULT_REPORT_TYPE).template)
     setPriority("MEDIUM")
-    toast.success("Ticket opened — a GitHub issue was created")
+    // Only claim the GitHub issue when one was actually created (best-effort —
+    // it's skipped when GITHUB_TOKEN is unset or GitHub errored).
+    toast.success(
+      data.github_issue_number
+        ? `Ticket opened — GitHub issue #${data.github_issue_number}`
+        : "Ticket opened"
+    )
     router.refresh()
   }
 
