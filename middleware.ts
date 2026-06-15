@@ -4,7 +4,6 @@
 
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
-import { rateLimitResponse } from "@/lib/ratelimit"
 
 const PUBLIC_PREFIXES = [
   "/login",
@@ -69,16 +68,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
-  // Global anti-abuse: cap authenticated write requests per user (the AI routes
-  // keep their own stricter limit). Brute-forcing /login is handled by GoTrue.
-  if (
-    user &&
-    pathname.startsWith("/api/") &&
-    ["POST", "PATCH", "PUT", "DELETE"].includes(request.method)
-  ) {
-    const limited = rateLimitResponse(`api:${user.id}`, 120, 60_000)
-    if (limited) return limited
-  }
+  // NB: per-user write rate-limiting lives in the API route handlers (Node
+  // runtime, e.g. lib/ratelimit in the AI/feedback routes). It was removed from
+  // this Edge middleware because Vercel's Edge runtime rejects the module here
+  // (deploy_failed: "unsupported modules") and an in-process counter is per-edge
+  // -instance anyway, so it provided little real protection at this layer.
 
   return response
 }
