@@ -22,7 +22,7 @@ export function listRepoFiles(relDir: string): string[] {
       .readdirSync(path.join(ROOT, relDir), { recursive: true, withFileTypes: true })
       .filter((d) => d.isFile())
       .map((d) => {
-        const base = (d.parentPath || d.path).slice(path.join(ROOT, relDir).length).replace(/^[\\/]/, "")
+        const base = ((d as any).parentPath ?? (d as any).path ?? "").slice(path.join(ROOT, relDir).length).replace(/^[\\/]/, "")
         return base ? `${base}/${d.name}` : d.name
       })
       .map((p) => p.split(path.sep).join("/"))
