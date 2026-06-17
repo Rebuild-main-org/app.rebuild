@@ -78,6 +78,29 @@ export async function ghIsOrgMember(login: string, org = defaultOrg()): Promise<
   }
 }
 
+// GitHub OAuth (per-user "Connect your GitHub"). Active only when an OAuth App
+// is configured; otherwise the connect button is disabled (fail-safe).
+export function githubOauthEnabled(): boolean {
+  return !!(process.env.GITHUB_OAUTH_CLIENT_ID && process.env.GITHUB_OAUTH_CLIENT_SECRET)
+}
+
+// Invite a GitHub user to the org as a member so they can contribute. Uses the
+// server admin token (requires `admin:org`). Returns the membership state:
+// "active" when added directly, "pending" when an email invitation was sent.
+export async function ghInviteToOrg(
+  login: string,
+  org = defaultOrg()
+): Promise<{ ok: boolean; state?: "active" | "pending"; error?: string }> {
+  if (!githubEnabled()) return { ok: false, error: "GitHub not configured" }
+  if (!login) return { ok: false, error: "missing GitHub login" }
+  try {
+    const { data } = await octokit().orgs.setMembershipForUser({ org, username: login, role: "member" })
+    return { ok: true, state: data.state === "active" ? "active" : "pending" }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "invite failed" }
+  }
+}
+
 export interface OrgRepo {
   name: string
   fullName: string
