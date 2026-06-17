@@ -8,6 +8,7 @@ import { ProfileForm } from "@/components/profile/profile-form"
 import { MfaSetup } from "@/components/profile/mfa-setup"
 import { AvatarUpload } from "@/components/profile/avatar-upload"
 import { ClaudeConnect } from "@/components/profile/claude-connect"
+import { GithubConnect } from "@/components/profile/github-connect"
 import {
   Card,
   CardContent,
@@ -53,6 +54,19 @@ export default async function ProfilePage() {
         </CardHeader>
         <CardContent>
           <ClaudeConnect />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>GitHub</CardTitle>
+          <CardDescription>
+            Connecte ton compte GitHub : on demande automatiquement ton accès à l&apos;organisation
+            pour que tu puisses contribuer aux dépôts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <GithubConnect />
         </CardContent>
       </Card>
 
