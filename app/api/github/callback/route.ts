@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 
 import { requireAuth } from "@/lib/auth/guard"
 import { sb } from "@/lib/data"
-import { githubOauthEnabled, ghInviteToOrg } from "@/lib/github"
+import { githubOauthEnabled, ghRequestContribution } from "@/lib/github"
 
 export const dynamic = "force-dynamic"
 
@@ -55,8 +55,9 @@ export async function GET(request: Request) {
     // Store the verified GitHub login on the user.
     await sb().from("users").update({ github_id: login }).eq("id", auth.id)
 
-    // Best-effort: invite them to the org so they can contribute.
-    const invite = await ghInviteToOrg(login)
+    // Best-effort: grant contribution access (org membership, or repo collaborator
+    // fallback). Connecting still succeeds even if the invite can't be sent.
+    const invite = await ghRequestContribution(login)
     return back(invite.ok ? (invite.state === "active" ? "member" : "invited") : "connected")
   } catch {
     return back("error")

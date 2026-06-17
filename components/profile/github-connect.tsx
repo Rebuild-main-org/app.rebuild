@@ -26,6 +26,7 @@ interface GithubState {
 export function GithubConnect() {
   const [state, setState] = useState<GithubState | null>(null)
   const [busy, setBusy] = useState(false)
+  const [requested, setRequested] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -63,9 +64,13 @@ export function GithubConnect() {
     setBusy(false)
     const data = await res.json().catch(() => ({}))
     if (!res.ok) return toast.error(data.error ?? "Échec de la demande")
+    const where = data.scope === "repo" ? `le dépôt ${data.target}` : `l'organisation ${data.target ?? ""}`.trim()
     toast.success(
-      data.state === "active" ? "Tu es membre de l'organisation." : "Invitation envoyée — vérifie tes emails."
+      data.state === "active"
+        ? `Accès accordé sur ${where}.`
+        : `Invitation envoyée pour ${where} — vérifie tes emails.`
     )
+    setRequested(true)
     load()
   }
 
@@ -96,6 +101,10 @@ export function GithubConnect() {
         {state.orgMember ? (
           <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs">
             <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" /> Membre de {state.org}
+          </span>
+        ) : requested ? (
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs">
+            <Clock className="size-3.5 text-amber-600 dark:text-amber-400" /> Accès demandé — vérifie tes emails
           </span>
         ) : (
           <Button variant="outline" size="sm" className="gap-1.5" onClick={requestAccess} disabled={busy}>
