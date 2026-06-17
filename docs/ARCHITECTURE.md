@@ -115,6 +115,7 @@ next-app/
 | `GITHUB_DEFAULT_ORG` | Org des repos auto-créés (`Rebuild-main-org`) | défaut |
 | `SUPPORT_GITHUB_REPO` | Repo unique où les tickets de support ouvrent une issue | défaut `Rebuild-main-org/app.rebuild` |
 | `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` | OAuth App pour « Connect your GitHub » (profil) → lie le compte + invite à l'org | bouton désactivé (no-op) |
+| `GITHUB_CONTRIB_REPO` | Dépôt d'invitation collaborateur (fallback quand l'adhésion org échoue) | défaut `Rebuild-main-org/app.rebuild` |
 | `STORAGE_BUCKET` | Bucket Supabase Storage privé (uploads) | bytes stockés en base64 dans Postgres |
 | `REALTIME_BRIDGE` | `"supabase"` pour fan-out SSE multi-instances | mono-instance |
 | `RESEND_API_KEY` / `EMAIL_FROM` | Email sortant (Resend) | email no-op |
@@ -509,7 +510,7 @@ notifications, présence, i18n, applicateur de préférences).
 | `/discord` | tous | DM, groupes, threads, réactions, présence, appels LiveKit ; badge DM non lus. |
 | `/rebuild216` | tous | guide CLI + commandes prêtes à coller pour les projets accessibles. |
 | `/how-to-use` | tous | mode d'emploi de la plateforme. |
-| `/profile` | tous | identité, avatar, **Connect with Claude** (clé Anthropic perso), **Connect your GitHub** (OAuth → lie le compte + **invite auto à l'org** via `ghInviteToOrg`, admin token `admin:org`), MFA, export RGPD. |
+| `/profile` | tous | identité, avatar, **Connect with Claude** (clé Anthropic perso), **Connect your GitHub** (OAuth → lie le compte + **accès contribution** via `ghRequestContribution` : adhésion org si le token est owner+`admin:org`, sinon **fallback collaborateur du dépôt** `GITHUB_CONTRIB_REPO` — ne requiert que `repo`), MFA, export RGPD. |
 | `/settings` | tous | préférences : thème, densité, langue, accent, disponibilité, skills/tags, DND… (thème + langue **appliqués au chargement** et persistés en base — voir §1). |
 | `/admin` | `admin.panel` | utilisateurs & rôles, permissions de sections, **Modèle IA plateforme** + **Modèle IA CLI** (SUPER_ADMIN), **Devis & factures** (créer / changer le statut / **supprimer** ADMIN+SUPER_ADMIN), charges & revenus, agents & agent-docs, usage IA, diffusion d'avis (SUPER_ADMIN). |
 | `/admin/audit` | `admin.panel` | 1000 dernières lignes d'`audit_logs` (résolution des noms). |

@@ -1,6 +1,6 @@
 import { requireAuth } from "@/lib/auth/guard"
 import { sb } from "@/lib/data"
-import { defaultOrg, ghInviteToOrg, ghIsOrgMember, githubOauthEnabled } from "@/lib/github"
+import { defaultOrg, ghRequestContribution, ghIsOrgMember, githubOauthEnabled } from "@/lib/github"
 
 export const dynamic = "force-dynamic"
 
@@ -30,9 +30,9 @@ export async function POST() {
   if (auth instanceof Response) return auth
   const login = await linkedLogin(auth.id)
   if (!login) return Response.json({ error: "No linked GitHub account" }, { status: 400 })
-  const invite = await ghInviteToOrg(login)
+  const invite = await ghRequestContribution(login)
   if (!invite.ok) return Response.json({ error: invite.error ?? "Invite failed" }, { status: 502 })
-  return Response.json({ ok: true, state: invite.state })
+  return Response.json({ ok: true, state: invite.state, scope: invite.scope, target: invite.target })
 }
 
 // DELETE /api/profile/github — unlink the GitHub account.

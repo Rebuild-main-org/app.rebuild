@@ -84,9 +84,69 @@ export function githubOauthEnabled(): boolean {
   return !!(process.env.GITHUB_OAUTH_CLIENT_ID && process.env.GITHUB_OAUTH_CLIENT_SECRET)
 }
 
-// Invite a GitHub user to the org as a member so they can contribute. Uses the
-// server admin token (requires `admin:org`). Returns the membership state:
-// "active" when added directly, "pending" when an email invitation was sent.
+// Repo the user is invited to contribute on when full org membership isn't
+// possible (configurable; defaults to the main app repo).
+function contribRepo(): string {
+  return process.env.GITHUB_CONTRIB_REPO || supportRepo()
+}
+
+export interface ContributionResult {
+  ok: boolean
+  state?: "active" | "pending"
+  scope?: "org" | "repo"
+  target?: string
+  error?: string
+}
+
+// Map a raw GitHub/Octokit error to a clear, actionable message.
+function describeGhError(e: unknown): string {
+  const status = (e as { status?: number })?.status
+  const msg = e instanceof Error ? e.message : "GitHub error"
+  if (status === 401) return "Token serveur GitHub invalide (GITHUB_TOKEN)."
+  if (status === 403) return "Le token serveur n'a pas les droits requis (admin du dépôt, ou `admin:org` + owner)."
+  if (status === 404) return "Utilisateur, organisation ou dépôt introuvable."
+  if (status === 422) return msg // e.g. already invited
+  return msg
+}
+
+// Give a user contribution access. Tries full ORG membership first (needs an
+// org-owner token with `admin:org`); if that isn't permitted, falls back to a
+// REPO collaborator invite (needs only repo-admin, which a `repo`-scoped token
+// has) — so it works with "any account" that can admin the repo.
+export async function ghRequestContribution(
+  login: string,
+  org = defaultOrg()
+): Promise<ContributionResult> {
+  if (!githubEnabled()) return { ok: false, error: "GitHub non configuré (GITHUB_TOKEN)." }
+  if (!login) return { ok: false, error: "Compte GitHub manquant." }
+
+  // 1) Best outcome: full org membership.
+  try {
+    const { data } = await octokit().orgs.setMembershipForUser({ org, username: login, role: "member" })
+    return { ok: true, state: data.state === "active" ? "active" : "pending", scope: "org", target: org }
+  } catch {
+    /* not an org owner / no admin:org — fall back to repo collaboration */
+  }
+
+  // 2) Fallback: collaborator on the main repo (push access).
+  const repo = contribRepo()
+  const r = parseRepo(repo)
+  if (!r) return { ok: false, error: `Dépôt de contribution invalide: ${repo}` }
+  try {
+    const res = await octokit().repos.addCollaborator({
+      owner: r.owner,
+      repo: r.repo,
+      username: login,
+      permission: "push",
+    })
+    // 201 → invitation created (pending); 204 → already a collaborator (active).
+    return { ok: true, state: (res.status as number) === 204 ? "active" : "pending", scope: "repo", target: repo }
+  } catch (e) {
+    return { ok: false, error: describeGhError(e) }
+  }
+}
+
+// Back-compat thin wrapper (org-only). Prefer ghRequestContribution.
 export async function ghInviteToOrg(
   login: string,
   org = defaultOrg()
@@ -97,7 +157,7 @@ export async function ghInviteToOrg(
     const { data } = await octokit().orgs.setMembershipForUser({ org, username: login, role: "member" })
     return { ok: true, state: data.state === "active" ? "active" : "pending" }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "invite failed" }
+    return { ok: false, error: describeGhError(e) }
   }
 }
 
