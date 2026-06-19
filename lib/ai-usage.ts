@@ -4,7 +4,6 @@ import { randomUUID } from "crypto"
 import { AsyncLocalStorage } from "node:async_hooks"
 
 import { sb, getUsersMap } from "./data"
-import { isAdmin } from "./auth"
 import { startTrace, flushObservability, type ObsTrace } from "./observability/langfuse"
 import type { Role } from "./types"
 
@@ -183,7 +182,11 @@ export async function withAi<T>(
   // The user's own connected Anthropic key (« Connect with Claude »). When set,
   // their calls run on their account — so they're exempt from the server budget.
   const apiKey = await userAnthropicKey(user.id)
-  if (!apiKey && !isAdmin(user.role)) {
+  // BYOK (user's own key) skips the platform budget — they pay Anthropic directly.
+  // The previous `&& !isAdmin(user.role)` exemption was REMOVED: org owners/admins
+  // are common, so exempting them let platform-key spend run uncapped. Platform-key
+  // usage is now ALWAYS metered. (Per-org cap via getOrgBudgetUsd — wiring TODO.)
+  if (!apiKey) {
     const monthStart = new Date()
     monthStart.setDate(1)
     monthStart.setHours(0, 0, 0, 0)

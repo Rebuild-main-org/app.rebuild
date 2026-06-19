@@ -1,35 +1,48 @@
-// Signed client-portal tokens (Fix C). Replaces the guessable workspace
-// slug/id with an HMAC-signed token so the portal can't be enumerated.
+// Signed client-portal tokens. HMAC-signed so the portal can't be enumerated.
 //
-// Token format: <wsId>.<base64url(hmac_sha256(wsId, secret))>
-// Secret: CLIENT_PORTAL_SECRET, falling back to the service-role key.
+// Token format: <wsId>.<expSeconds>.<base64url(hmac_sha256(`${wsId}.${exp}`, secret))>
+//
+// Secret: CLIENT_PORTAL_SECRET — now REQUIRED and DISTINCT. The old fallbacks
+// (the service-role key, then a literal "insecure-dev-secret") are removed:
+//   - falling back to the service-role key coupled token validity to that key,
+//     so rotating one silently broke the other (and vice-versa);
+//   - the literal default would sign forgeable tokens in any misconfigured env.
+// Tokens now also EXPIRE (default 30 days), so a leaked link doesn't live forever.
 
 import "server-only"
 import { createHmac, timingSafeEqual } from "crypto"
 
+const DEFAULT_TTL_DAYS = 30
+
 function secret(): string {
-  return (
-    process.env.CLIENT_PORTAL_SECRET ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    "insecure-dev-secret"
-  )
+  const s = process.env.CLIENT_PORTAL_SECRET
+  if (!s || s.length < 16) {
+    throw new Error(
+      "CLIENT_PORTAL_SECRET must be set (>= 16 chars) and distinct from the service-role key"
+    )
+  }
+  return s
 }
 
-function sign(wsId: string): string {
-  return createHmac("sha256", secret()).update(wsId).digest("base64url")
+function sign(payload: string): string {
+  return createHmac("sha256", secret()).update(payload).digest("base64url")
 }
 
-export function signPortalToken(wsId: string): string {
-  return `${wsId}.${sign(wsId)}`
+export function signPortalToken(wsId: string, ttlDays = DEFAULT_TTL_DAYS): string {
+  const exp = Math.floor(Date.now() / 1000) + ttlDays * 86400
+  const payload = `${wsId}.${exp}`
+  return `${payload}.${sign(payload)}`
 }
 
-// Returns the workspace id if the token is valid, else null.
+// Returns the workspace id if the token is valid AND unexpired, else null.
 export function verifyPortalToken(token: string): string | null {
-  const idx = token.lastIndexOf(".")
-  if (idx <= 0) return null
-  const wsId = token.slice(0, idx)
-  const sig = token.slice(idx + 1)
-  const expected = sign(wsId)
+  const parts = token.split(".")
+  if (parts.length !== 3) return null
+  const [wsId, expStr, sig] = parts
+  const exp = Number(expStr)
+  if (!wsId || !Number.isFinite(exp)) return null
+  if (exp < Math.floor(Date.now() / 1000)) return null // expired
+  const expected = sign(`${wsId}.${exp}`)
   try {
     if (sig.length === expected.length && timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
       return wsId

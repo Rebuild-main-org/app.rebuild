@@ -2,17 +2,22 @@ import { randomUUID } from "crypto"
 
 import { getSessionUser } from "@/lib/auth/session"
 import { can } from "@/lib/auth"
-import { SEL, sb } from "@/lib/data"
+import { requireTenant } from "@/lib/tenant"
+import { sbScoped, SEL } from "@/lib/data-scoped"
 import type { Lead } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
 
-// GET /api/crm/leads — pipeline (crm.view).
+// GET /api/crm/leads — pipeline (crm.view). RLS scopes rows to the caller's org.
 export async function GET() {
   const user = await getSessionUser()
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 })
   if (!can(user, "crm.view")) return Response.json({ error: "Forbidden" }, { status: 403 })
-  const { data, error } = await sb().from("leads").select(SEL.lead).order("created_at", { ascending: false })
+  const supabase = await sbScoped()
+  const { data, error } = await supabase
+    .from("leads")
+    .select(SEL.lead)
+    .order("created_at", { ascending: false })
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return Response.json(data ?? [])
 }
@@ -22,12 +27,16 @@ export async function POST(request: Request) {
   const user = await getSessionUser()
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 })
   if (!can(user, "crm.manage")) return Response.json({ error: "Forbidden" }, { status: 403 })
+  const tenant = await requireTenant()
+  if (tenant instanceof Response) return tenant
+
   const body = (await request.json()) as Partial<Lead>
   if (!body.company?.trim()) {
     return Response.json({ error: "company is required" }, { status: 400 })
   }
   const row = {
     id: randomUUID(),
+    org_id: tenant.orgId, // tenant stamp — checked by the RLS insert policy
     company: body.company.trim(),
     contact_name: body.contactName ?? "",
     contact_email: body.contactEmail ?? "",
@@ -38,7 +47,8 @@ export async function POST(request: Request) {
     owner_id: body.ownerId ?? user.id,
     notes: body.notes ?? null,
   }
-  const { data, error } = await sb().from("leads").insert(row).select(SEL.lead).single()
+  const supabase = await sbScoped()
+  const { data, error } = await supabase.from("leads").insert(row).select(SEL.lead).single()
   if (error) return Response.json({ error: error.message }, { status: 400 })
   return Response.json(data, { status: 201 })
 }

@@ -7,6 +7,10 @@ export default defineConfig({
     include: ["lib/**/*.test.ts", "tests/**/*.test.ts"],
   },
   resolve: {
-    alias: { "@": resolve(__dirname, ".") },
+    alias: {
+      "@": resolve(__dirname, "."),
+      // `server-only` throws outside an RSC; stub it so server libs are testable.
+      "server-only": resolve(__dirname, "tests/stubs/server-only.ts"),
+    },
   },
 })
