@@ -2,6 +2,7 @@ import { randomUUID } from "crypto"
 
 import { fetchSupportTickets, getUsersMap, sb } from "@/lib/data"
 import { requireAuth } from "@/lib/auth/guard"
+import { requireTenant } from "@/lib/tenant"
 import { can } from "@/lib/auth"
 import { createNotification } from "@/lib/mutations"
 import { ghCreateIssue, supportRepo } from "@/lib/github"
@@ -36,6 +37,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireAuth()
   if (auth instanceof Response) return auth
+  const tenant = await requireTenant()
+  if (tenant instanceof Response) return tenant
   const { subject, body, priority, workspaceId, reportType: reportTypeRaw } = (await request.json()) as {
     subject?: string
     body?: string
@@ -53,6 +56,8 @@ export async function POST(request: Request) {
   const now = new Date().toISOString()
   const row = {
     id: randomUUID(),
+    org_id: tenant.orgId, // tenant stamp; read path (fetchSupportTickets) still
+    // uses service-role + owner/staff scoping — convert to RLS in a later slice.
     subject: subject.trim(),
     body: body ?? "",
     requester_email: auth.email,

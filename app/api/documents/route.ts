@@ -1,14 +1,18 @@
 import { randomUUID } from "crypto"
 
 import { getSessionUser } from "@/lib/auth/session"
-import { SEL, getUsersMap, sb } from "@/lib/data"
+import { getUsersMap } from "@/lib/data"
+import { sbScoped, SEL } from "@/lib/data-scoped"
 import { requireWorkspace } from "@/lib/auth/guard"
+import { requireTenant } from "@/lib/tenant"
 import { validateUploads } from "@/lib/uploads"
 import { storageEnabled, uploadDataUrl } from "@/lib/storage"
 
 export const dynamic = "force-dynamic"
 
 // GET /api/documents?workspaceId=&projectId= — list documents in scope.
+// RLS scopes rows to the caller's org; the workspace/project filter narrows
+// within the org. (getUsersMap reads the global users directory, not tenant data.)
 export async function GET(request: Request) {
   const user = await getSessionUser()
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 })
@@ -19,7 +23,8 @@ export async function GET(request: Request) {
   const gAccess = await requireWorkspace(workspaceId)
   if (gAccess instanceof Response) return gAccess
 
-  let q = sb().from("documents").select(SEL.document).eq("workspace_id", workspaceId)
+  const supabase = await sbScoped()
+  let q = supabase.from("documents").select(SEL.document).eq("workspace_id", workspaceId)
   q = projectId ? q.eq("project_id", projectId) : q.is("project_id", null)
   const [{ data }, users] = await Promise.all([
     q.order("created_at", { ascending: false }),
@@ -34,6 +39,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const user = await getSessionUser()
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 })
+  const tenant = await requireTenant()
+  if (tenant instanceof Response) return tenant
   const body = (await request.json()) as {
     workspaceId?: string
     projectId?: string
@@ -54,6 +61,7 @@ export async function POST(request: Request) {
         : null
       return {
         id: randomUUID(),
+        org_id: tenant.orgId, // tenant stamp — checked by the RLS insert policy
         name: f.name,
         mime_type: f.mimeType || "application/octet-stream",
         size: f.size,
@@ -66,7 +74,8 @@ export async function POST(request: Request) {
       }
     })
   )
-  const { error } = await sb().from("documents").insert(rows)
+  const supabase = await sbScoped()
+  const { error } = await supabase.from("documents").insert(rows)
   if (error) return Response.json({ error: error.message }, { status: 400 })
   return Response.json({ count: rows.length, ids: rows.map((r) => r.id) }, { status: 201 })
 }

@@ -38,17 +38,13 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const meta = (user.user_metadata ?? {}) as Record<string, unknown>
   const githubUsername =
     typeof meta.user_name === "string" && meta.user_name ? meta.user_name : undefined
-  let role = (profile?.role as Role) ?? "ENGINEER"
-  const list = (v?: string) =>
-    (v ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)
-  // Bootstrap admins (BOOTSTRAP_ADMINS, comma-separated) are elevated to ADMIN
-  // ONLY while their stored role is still the default ENGINEER. Once an admin
-  // explicitly assigns them another role, that assignment wins (no re-elevation).
-  if (email && role === "ENGINEER" && list(process.env.BOOTSTRAP_ADMINS).includes(email.toLowerCase()))
-    role = "ADMIN"
-  // Super-admins: BOOTSTRAP_SUPER_ADMINS plus the built-in admin@rebuild.tn.
-  const superAdmins = [...list(process.env.BOOTSTRAP_SUPER_ADMINS), "admin@rebuild.tn"]
-  if (email && superAdmins.includes(email.toLowerCase())) role = "SUPER_ADMIN"
+  // Role comes solely from the profiles table now. The old env-based elevation
+  // (BOOTSTRAP_ADMINS / BOOTSTRAP_SUPER_ADMINS / hardcoded admin@rebuild.tn) was
+  // REMOVED — it is unsafe under public self-serve signup (anyone matching those
+  // env emails would self-elevate to platform super-admin). Platform-admin is now
+  // a separate concept (lib/platform.ts `platform_admins` table), and the ORG
+  // role lives in organization_members (lib/tenant.ts).
+  const role = (profile?.role as Role) ?? "ENGINEER"
 
   return {
     id: user.id,
